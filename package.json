@@ -3,15 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "export $(grep -v '^#' .env.local | xargs) && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
+    "@fal-ai/client": "^1.10.1",
+    "@google/generative-ai": "^0.24.1",
+    "@remotion/core": "^1.0.0-y.46",
+    "@remotion/player": "^4.0.461",
+    "@types/pdf-parse": "^1.1.5",
+    "elevenlabs": "^1.59.0",
     "next": "16.2.6",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "remotion": "^4.0.461"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

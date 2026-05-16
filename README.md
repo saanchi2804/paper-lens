@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PaperLens
 
-## Getting Started
+**Hey! Welcome to PaperLens 👋**
 
-First, run the development server:
+This is a tool I'm building to make research papers actually enjoyable to learn from. The idea: upload a PDF, and PaperLens generates a narrated video that explains the paper the way a professor would — with slides, diagrams, and a teaching voice walking you through it.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## What's working right now
+
+- Upload any research PDF → the AI reads it and writes a 13-scene teaching script
+- Each scene gets the right visual: concept diagrams, layered architecture charts, bar charts with real numbers, or AI-generated illustrations depending on what the content needs
+- Audio narration plays in sync with the slides
+
+> **Note on audio quality:** The current version uses the browser's built-in text-to-speech (free, no quota) as a placeholder. The final version will use ElevenLabs — a specific voice called Rachel that sounds like a real teacher. You'll hear the difference immediately when we switch it back.
+
+## The vision
+
+Think YouTube explainer video but generated entirely from a PDF. Not bullet points — actual visual explanations of concepts, the way a professor draws on a whiteboard.
+
+## Running locally
+
+1. Clone the repo
+2. Create a `.env.local` file in the root with your API keys (ask me for these):
+
+```
+YALE_API_KEY=your_key_here
+ELEVENLABS_API_KEY=your_key_here
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Install and run:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) and upload a PDF.
 
-## Learn More
+## Tech stack
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Next.js** — app framework
+- **Remotion** — frame-based video composition in React
+- **ElevenLabs** — narration (Rachel voice, temporarily replaced with Web Speech API)
+- **Pollinations.ai** — free AI image generation for illustration scenes
+- **Yale LLM Router** — script generation via GLM-4.5
