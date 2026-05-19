@@ -122,33 +122,49 @@ Here is the research paper:
 
 ${pdfText}`;
 
-    const response = await client.messages.create({
+    // Stream the LLM response — keeps connection alive so Vercel doesn't time out
+    const stream = await client.messages.stream({
       model: "glm-4.5-air",
       max_tokens: 10000,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "";
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        let raw = "";
+        try {
+          for await (const chunk of stream) {
+            if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+              raw += chunk.delta.text;
+            }
+          }
 
-    let script;
-    try {
-      let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) cleaned = jsonMatch[0];
-      script = JSON.parse(cleaned);
-    } catch (parseErr) {
-      console.error("[explain] raw response:", raw.slice(0, 1000));
-      return Response.json({ error: `Failed to parse script from model. Raw: ${raw.slice(0, 300)}` }, { status: 500 });
-    }
+          let script;
+          try {
+            let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+            const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+            if (jsonMatch) cleaned = jsonMatch[0];
+            script = JSON.parse(cleaned);
+          } catch {
+            controller.enqueue(encoder.encode(JSON.stringify({ error: `Failed to parse script. Raw: ${raw.slice(0, 300)}` })));
+            controller.close();
+            return;
+          }
 
-    script.scenes = script.scenes
-      .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim())
-      .map((scene: Scene) => ({
-        ...scene,
-        duration_seconds: wordsToSeconds(scene.narration),
-      }));
+          script.scenes = script.scenes
+            .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim())
+            .map((scene: Scene) => ({ ...scene, duration_seconds: wordsToSeconds(scene.narration) }));
 
-    return Response.json(script);
+          controller.enqueue(encoder.encode(JSON.stringify(script)));
+        } catch (err) {
+          controller.enqueue(encoder.encode(JSON.stringify({ error: `Stream error: ${err instanceof Error ? err.message : String(err)}` })));
+        }
+        controller.close();
+      },
+    });
+
+    return new Response(readable, { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     console.error("[explain] Unhandled error:", err);
     return Response.json({ error: `Server error: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
