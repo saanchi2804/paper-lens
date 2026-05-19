@@ -22,11 +22,10 @@ export async function POST(request: NextRequest) {
 
     let pdfText: string;
     try {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParse = (await import("pdf-parse") as any).default ?? (await import("pdf-parse") as any);
-      const result = await pdfParse(buffer);
-      pdfText = result.text.slice(0, 14000);
+      const { extractText } = await import("unpdf");
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      const { text } = await extractText(buffer, { mergePages: true });
+      pdfText = text.slice(0, 14000);
     } catch (err) {
       console.error("[explain] PDF parse error:", err);
       return Response.json({ error: `Failed to read PDF: ${err instanceof Error ? err.message : String(err)}` }, { status: 422 });
