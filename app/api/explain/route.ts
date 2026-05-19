@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
     let pdfText: string;
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const pdfParse = (await import("pdf-parse")).default;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pdfParse = (await import("pdf-parse") as any).default ?? (await import("pdf-parse") as any);
       const result = await pdfParse(buffer);
       pdfText = result.text.slice(0, 14000);
     } catch (err) {
