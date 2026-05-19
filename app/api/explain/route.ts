@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Scene } from "@/types/script";
 
 export const runtime = "nodejs";
+export const maxDuration = 60; // Vercel hobby plan max
 
 function wordsToSeconds(text: string): number {
   const words = text.trim().split(/\s+/).length;
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
       const { extractText } = await import("unpdf");
       const buffer = new Uint8Array(await file.arrayBuffer());
       const { text } = await extractText(buffer, { mergePages: true });
-      pdfText = text.slice(0, 14000);
+      pdfText = text.slice(0, 10000);
     } catch (err) {
       console.error("[explain] PDF parse error:", err);
       return Response.json({ error: `Failed to read PDF: ${err instanceof Error ? err.message : String(err)}` }, { status: 422 });
@@ -123,7 +124,7 @@ ${pdfText}`;
 
     const response = await client.messages.create({
       model: "glm-4.5-air",
-      max_tokens: 16000,
+      max_tokens: 10000,
       messages: [{ role: "user", content: prompt }],
     });
 
