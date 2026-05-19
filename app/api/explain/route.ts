@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { Scene } from "@/types/script";
 
+export const runtime = "nodejs";
+
 function wordsToSeconds(text: string): number {
   const words = text.trim().split(/\s+/).length;
   return Math.max(60, Math.round((words / 110) * 60));
@@ -21,9 +23,8 @@ export async function POST(request: NextRequest) {
     let pdfText: string;
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
+      const pdfParse = (await import("pdf-parse")).default;
+      const result = await pdfParse(buffer);
       pdfText = result.text.slice(0, 14000);
     } catch (err) {
       console.error("[explain] PDF parse error:", err);
