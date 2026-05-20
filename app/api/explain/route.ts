@@ -32,24 +32,23 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: `Failed to read PDF: ${err instanceof Error ? err.message : String(err)}` }, { status: 422 });
     }
 
-    const prompt = `You are Saisha, a passionate university professor creating a 15-minute instructional video. Your goal: a student who watches this will genuinely UNDERSTAND the concept — not just know what the paper found.
+    const prompt = `You are Saisha, a university professor creating an 8-minute instructional video explaining a research paper. Be clear, concrete, and engaging.
 
 Return ONLY valid JSON, no markdown fences, no text outside the JSON.
 
-SCENE SEQUENCE — exactly 13 scenes in this order:
-intro, hook, prerequisite, prerequisite, example, concept, concept, analogy, worked_example, worked_example, finding, connection, summary
+SCENE SEQUENCE — exactly 8 scenes in this order:
+intro, hook, prerequisite, example, concept, worked_example, finding, summary
 
-MANDATORY TEACHING RULES:
-1. NEVER open with "This paper..." or "Researchers found..." — open with the real-world phenomenon or puzzle that makes the viewer lean forward.
-2. prerequisite scenes: teach the background concept from scratch. Define it, give a concrete mini-example, explain why it matters.
-3. In scene 5 (example), introduce ONE specific concrete case from the paper. Return to THIS SAME EXAMPLE in every scene that follows.
-4. concept scenes: wrong assumption → why it fails → correct concept.
-5. worked_example scenes: walk through the actual procedure step by step with real numbers from the paper.
-6. finding scenes: cite exact statistics — means, percentages, p-values. NEVER say "performed better." Say "scored 7.3 versus 5.8, a 26% difference, p < .05."
-7. Use rhetorical questions to pull students forward.
-8. End each scene with one sentence of anticipation.
+RULES:
+1. Open with a real-world puzzle or phenomenon — never "This paper..."
+2. prerequisite: teach the background concept from scratch with a concrete mini-example
+3. example: introduce ONE specific case/participant/condition from the paper — return to it in every later scene
+4. concept: wrong assumption → why it fails → correct concept
+5. worked_example: walk through the actual method step by step with real numbers
+6. finding: cite exact statistics — never "performed better", say "scored 7.3 vs 5.8, p < .05"
+7. End each scene with one sentence of anticipation
 
-NARRATION: 130-160 words per scene. Speak like a professor at a whiteboard — natural, direct, short sentences.
+NARRATION: 70-90 words per scene. Natural, direct, short sentences.
 
 ━━━ VISUAL SPECIFICATION ━━━
 For each scene choose the visual type that BEST ILLUSTRATES the concept. The visual must explain and illuminate — not echo the words. Ask: what would a professor draw on a whiteboard to make this click?
@@ -122,49 +121,30 @@ Here is the research paper:
 
 ${pdfText}`;
 
-    // Stream the LLM response — keeps connection alive so Vercel doesn't time out
-    const stream = await client.messages.stream({
+    const response = await client.messages.create({
       model: "glm-4.5-air",
-      max_tokens: 10000,
+      max_tokens: 6000,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        let raw = "";
-        try {
-          for await (const chunk of stream) {
-            if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-              raw += chunk.delta.text;
-            }
-          }
+    const raw = response.content[0].type === "text" ? response.content[0].text : "";
 
-          let script;
-          try {
-            let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
-            const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-            if (jsonMatch) cleaned = jsonMatch[0];
-            script = JSON.parse(cleaned);
-          } catch {
-            controller.enqueue(encoder.encode(JSON.stringify({ error: `Failed to parse script. Raw: ${raw.slice(0, 300)}` })));
-            controller.close();
-            return;
-          }
+    let script;
+    try {
+      let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) cleaned = jsonMatch[0];
+      script = JSON.parse(cleaned);
+    } catch {
+      console.error("[explain] raw response:", raw.slice(0, 500));
+      return Response.json({ error: `Failed to parse script. Raw: ${raw.slice(0, 300)}` }, { status: 500 });
+    }
 
-          script.scenes = script.scenes
-            .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim())
-            .map((scene: Scene) => ({ ...scene, duration_seconds: wordsToSeconds(scene.narration) }));
+    script.scenes = script.scenes
+      .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim())
+      .map((scene: Scene) => ({ ...scene, duration_seconds: wordsToSeconds(scene.narration) }));
 
-          controller.enqueue(encoder.encode(JSON.stringify(script)));
-        } catch (err) {
-          controller.enqueue(encoder.encode(JSON.stringify({ error: `Stream error: ${err instanceof Error ? err.message : String(err)}` })));
-        }
-        controller.close();
-      },
-    });
-
-    return new Response(readable, { headers: { "Content-Type": "application/json" } });
+    return Response.json(script);
   } catch (err) {
     console.error("[explain] Unhandled error:", err);
     return Response.json({ error: `Server error: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
