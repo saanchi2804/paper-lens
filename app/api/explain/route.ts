@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { Scene } from "@/types/script";
 
 export const runtime = "nodejs";
@@ -12,10 +12,7 @@ function wordsToSeconds(text: string): number {
 
 export async function POST(request: NextRequest) {
   try {
-    const client = new Anthropic({
-      apiKey: process.env.YALE_API_KEY,
-      baseURL: "https://llm.kyle.pub/s/zai-coding",
-    });
+    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
     const { text } = await request.json();
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -117,13 +114,13 @@ Here is the research paper:
 
 ${pdfText}`;
 
-    const response = await client.messages.create({
-      model: "glm-4.5-air",
-      max_tokens: 6000,
-      messages: [{ role: "user", content: prompt }],
+    const response = await client.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: { maxOutputTokens: 6000 },
     });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "";
+    const raw = response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
     let script;
     try {
