@@ -49,10 +49,26 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setScript(null);
-    const formData = new FormData();
-    formData.append("pdf", file);
     try {
-      const res = await fetch("/api/explain", { method: "POST", body: formData });
+      // Parse PDF in the browser — pdfjs-dist is browser-native, no server-side DOMMatrix issues
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      let pdfText = "";
+      for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pdfText += content.items.map((item: any) => item.str ?? "").join(" ") + "\n";
+      }
+      pdfText = pdfText.slice(0, 10000);
+
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pdfText }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
       setScript(data);

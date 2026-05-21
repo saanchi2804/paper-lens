@@ -17,20 +17,11 @@ export async function POST(request: NextRequest) {
       baseURL: "https://llm.kyle.pub/s/zai-coding",
     });
 
-    const formData = await request.formData();
-    const file = formData.get("pdf") as File | null;
-    if (!file) return Response.json({ error: "No PDF uploaded." }, { status: 400 });
-
-    let pdfText: string;
-    try {
-      const { extractText } = await import("unpdf");
-      const buffer = new Uint8Array(await file.arrayBuffer());
-      const { text } = await extractText(buffer, { mergePages: true });
-      pdfText = text.slice(0, 10000);
-    } catch (err) {
-      console.error("[explain] PDF parse error:", err);
-      return Response.json({ error: `Failed to read PDF: ${err instanceof Error ? err.message : String(err)}` }, { status: 422 });
+    const { text } = await request.json();
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return Response.json({ error: "No text provided." }, { status: 400 });
     }
+    const pdfText = text.slice(0, 10000);
 
     const prompt = `You are Saisha, a university professor creating an 8-minute instructional video explaining a research paper. Be clear, concrete, and engaging.
 
