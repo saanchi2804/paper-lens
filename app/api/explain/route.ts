@@ -21,7 +21,12 @@ export async function POST(request: NextRequest) {
     if (!text || typeof text !== "string" || !text.trim()) {
       return Response.json({ error: "No text provided." }, { status: 400 });
     }
-    const pdfText = text.slice(0, 10000);
+    const pdfText = text
+      .replace(/\0/g, "")
+      .replace(/[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 10000);
 
     const prompt = `You are Saisha, a university professor creating an 8-minute instructional video explaining a research paper. Be clear, concrete, and engaging.
 

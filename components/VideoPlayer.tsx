@@ -23,12 +23,23 @@ function speechBestVoice(): SpeechSynthesisVoice | null {
   );
 }
 
+function sanitizeForSpeech(text: string): string {
+  // Strip anything WebKit's SpeechSynthesis rejects (null bytes, surrogates, control chars)
+  return text
+    .replace(/\0/g, "")
+    .replace(/[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
+    .replace(/[\uD800-\uDFFF]/g, "")  // lone surrogates
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function speechSpeak(text: string, offsetSeconds: number, rate: number, onEnd: () => void) {
   window.speechSynthesis.cancel();
+  const clean = sanitizeForSpeech(text);
   // Approximate char position: ~110 wpm × ~5.5 chars/word
   const charsPerSec = (rate * 110 * 5.5) / 60;
   const charOffset = Math.max(0, Math.round(offsetSeconds * charsPerSec));
-  const speakText = charOffset > 0 ? text.slice(Math.min(charOffset, text.length - 50)) : text;
+  const speakText = charOffset > 0 ? clean.slice(Math.min(charOffset, clean.length - 50)) : clean;
 
   const utt = new SpeechSynthesisUtterance(speakText);
   utt.rate = rate;

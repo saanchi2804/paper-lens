@@ -50,9 +50,14 @@ export default function Home() {
     setError(null);
     setScript(null);
     try {
-      // Parse PDF in the browser — pdfjs-dist is browser-native, no server-side DOMMatrix issues
+      // Parse PDF in the browser using pdfjs-dist (browser-native)
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      // Try CDN worker; fall back to disabling the worker entirely if it fails
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      } catch {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      }
       const buffer = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
       let pdfText = "";
@@ -62,7 +67,13 @@ export default function Home() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pdfText += content.items.map((item: any) => item.str ?? "").join(" ") + "\n";
       }
-      pdfText = pdfText.slice(0, 10000);
+      // Strip null bytes, control chars, and non-printable characters that break JSON / TTS
+      pdfText = pdfText
+        .replace(/\0/g, "")
+        .replace(/[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 10000);
 
       const res = await fetch("/api/explain", {
         method: "POST",
