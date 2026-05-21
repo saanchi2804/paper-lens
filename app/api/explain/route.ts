@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import { Scene } from "@/types/script";
 
 export const runtime = "nodejs";
@@ -114,9 +115,11 @@ Here is the research paper:
 
 ${pdfText}`;
 
-    const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     let raw = "";
-    for (const model of MODELS) {
+    let geminiFailed = false;
+
+    for (const model of GEMINI_MODELS) {
       try {
         const response = await client.models.generateContent({
           model,
@@ -127,11 +130,31 @@ ${pdfText}`;
         break;
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        const is503 = msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand");
-        if (!is503 || model === MODELS[MODELS.length - 1]) throw e;
-        console.warn(`[explain] ${model} unavailable, trying next model`);
-        await new Promise(r => setTimeout(r, 1500));
+        const isRetryable = msg.includes("503") || msg.includes("UNAVAILABLE") ||
+                            msg.includes("high demand") || msg.includes("429") ||
+                            msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
+        if (!isRetryable || model === GEMINI_MODELS[GEMINI_MODELS.length - 1]) {
+          geminiFailed = true;
+          console.warn(`[explain] all Gemini models failed, falling back to Yale`);
+          break;
+        }
+        console.warn(`[explain] ${model} unavailable, trying next`);
+        await new Promise(r => setTimeout(r, 1000));
       }
+    }
+
+    // Yale LLM fallback when Gemini quota is exhausted
+    if (geminiFailed || !raw) {
+      const yale = new Anthropic({
+        apiKey: process.env.YALE_API_KEY,
+        baseURL: "https://llm.kyle.pub/s/zai-coding",
+      });
+      const yaleResp = await yale.messages.create({
+        model: "glm-4.5-air",
+        max_tokens: 6000,
+        messages: [{ role: "user", content: prompt }],
+      });
+      raw = yaleResp.content[0].type === "text" ? yaleResp.content[0].text : "";
     }
 
     let script;
