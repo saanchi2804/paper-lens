@@ -114,13 +114,25 @@ Here is the research paper:
 
 ${pdfText}`;
 
-    const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: { maxOutputTokens: 6000 },
-    });
-
-    const raw = response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    let raw = "";
+    for (const model of MODELS) {
+      try {
+        const response = await client.models.generateContent({
+          model,
+          contents: prompt,
+          config: { maxOutputTokens: 6000 },
+        });
+        raw = response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        break;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const is503 = msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand");
+        if (!is503 || model === MODELS[MODELS.length - 1]) throw e;
+        console.warn(`[explain] ${model} unavailable, trying next model`);
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
 
     let script;
     try {
