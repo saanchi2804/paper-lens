@@ -24,11 +24,15 @@ function speechBestVoice(): SpeechSynthesisVoice | null {
 }
 
 function sanitizeForSpeech(text: string): string {
-  // Strip anything WebKit's SpeechSynthesis rejects (null bytes, surrogates, control chars)
+  // WebKit parses TTS text as SSML — < > & are XML special chars that cause
+  // "The string did not match the expected pattern" (e.g. "p < .05" triggers it)
   return text
     .replace(/\0/g, "")
     .replace(/[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
-    .replace(/[\uD800-\uDFFF]/g, "")  // lone surrogates
+    .replace(/[\uD800-\uDFFF]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/</g, " less than ")
+    .replace(/>/g, " greater than ")
     .replace(/\s+/g, " ")
     .trim();
 }
