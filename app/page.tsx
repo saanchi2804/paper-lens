@@ -52,7 +52,7 @@ export default function Home() {
     try {
       // Parse PDF in the browser — pdfjs-dist is browser-native, no server-side DOMMatrix issues
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
       const buffer = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
       let pdfText = "";

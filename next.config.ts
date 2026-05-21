@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  turbopack: {
+    resolveAlias: {
+      canvas: "./empty-module.js",
+    },
+  },
+};
 
 export default nextConfig;
