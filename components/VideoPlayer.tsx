@@ -500,19 +500,34 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
     };
   }, [sceneOffsets, audioReady]);
 
-  // Drift correction — keep Remotion in sync with speech elapsed time
+  // Drift correction — only seek FORWARD (never backward) to avoid repeat glitch.
+  // If speech falls behind Remotion, that's fine; if Remotion falls behind speech, catch up.
   useEffect(() => {
     if (!audioReady) return;
     const id = setInterval(() => {
       if (!isPlayingRef.current) return;
       const targetFrame = Math.round(speechElapsed() * FPS);
       const actualFrame = playerRef.current?.getCurrentFrame() ?? 0;
-      if (Math.abs(targetFrame - actualFrame) > FPS * 0.8) {
+      // Only advance Remotion forward — never rewind it based on speech timing
+      if (targetFrame - actualFrame > FPS * 1.5) {
         playerRef.current?.seekTo(Math.min(targetFrame, totalFrames - 1));
       }
     }, 1500);
     return () => clearInterval(id);
   }, [audioReady, totalFrames]);
+
+  // Chrome/WebKit keepalive — prevents speech from silently cutting off mid-utterance
+  useEffect(() => {
+    if (!audioReady) return;
+    const id = setInterval(() => {
+      if (!isPlayingRef.current) return;
+      if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
+    }, 10000);
+    return () => clearInterval(id);
+  }, [audioReady]);
 
   const handlePlay = useCallback(() => {
     const frame = playerRef.current?.getCurrentFrame() ?? 0;
