@@ -23,42 +23,72 @@ function speechBestVoice(): SpeechSynthesisVoice | null {
   );
 }
 
-function sanitizeForSpeech(text: string): string {
-  // WebKit parses TTS text as SSML — < > & are XML special chars that cause
-  // "The string did not match the expected pattern" (e.g. "p < .05" triggers it)
-  return text
+// ── Progressive sanitization levels ──────────────────────────────────────────
+// WebKit treats TTS text as SSML, so anything XML-special throws
+// "The string did not match the expected pattern". We try three levels:
+// if level 1 still throws, fall back to level 2 (ASCII-only), then level 3
+// (alphanumeric only). If all fail we silently skip audio so the video keeps
+// running — the error never surfaces to the user again.
+const SPEECH_SANITIZERS: Array<(t: string) => string> = [
+  // Level 1 — replace known problem chars
+  (t) => t
     .replace(/\0/g, "")
     .replace(/[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
     .replace(/[\uD800-\uDFFF]/g, "")
     .replace(/&/g, " and ")
     .replace(/</g, " less than ")
     .replace(/>/g, " greater than ")
+    .replace(/["""]/g, '"')
+    .replace(/[''']/g, "'")
+    .replace(/[^\S ]/g, " ")
     .replace(/\s+/g, " ")
-    .trim();
-}
+    .trim(),
+  // Level 2 — printable ASCII only
+  (t) => t.replace(/[^\x20-\x7E]/g, " ").replace(/[<>&]/g, " ").replace(/\s+/g, " ").trim(),
+  // Level 3 — letters, digits, basic punctuation only
+  (t) => t.replace(/[^a-zA-Z0-9\s.,!?'():;-]/g, " ").replace(/\s+/g, " ").trim(),
+];
 
 function speechSpeak(text: string, offsetSeconds: number, rate: number, onEnd: () => void) {
-  window.speechSynthesis.cancel();
-  const clean = sanitizeForSpeech(text);
-  // Approximate char position: ~110 wpm × ~5.5 chars/word
-  const charsPerSec = (rate * 110 * 5.5) / 60;
-  const charOffset = Math.max(0, Math.round(offsetSeconds * charsPerSec));
-  const speakText = charOffset > 0 ? clean.slice(Math.min(charOffset, clean.length - 50)) : clean;
+  try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
 
-  const utt = new SpeechSynthesisUtterance(speakText);
-  utt.rate = rate;
-  utt.onend = onEnd;
-  const voice = speechBestVoice();
-  if (voice) utt.voice = voice;
-  _startedAt = performance.now();
+  const charsPerSec = (rate * 110 * 5.5) / 60;
+  const charOffset  = Math.max(0, Math.round(offsetSeconds * charsPerSec));
+
+  for (const sanitize of SPEECH_SANITIZERS) {
+    try {
+      const clean     = sanitize(text);
+      const speakText = charOffset > 0 ? clean.slice(Math.min(charOffset, Math.max(clean.length - 50, 0))) : clean;
+      const utt       = new SpeechSynthesisUtterance(speakText);
+      utt.rate        = rate;
+      utt.onend       = onEnd;
+      const voice     = speechBestVoice();
+      if (voice) utt.voice = voice;
+      _startedAt  = performance.now();
+      _startOffset = offsetSeconds;
+      _speechRate  = rate;
+      window.speechSynthesis.speak(utt);
+      return; // success — stop trying
+    } catch { /* try next level */ }
+  }
+  // All sanitization levels failed — run video silently
+  _startedAt  = performance.now();
   _startOffset = offsetSeconds;
-  _speechRate = rate;
-  window.speechSynthesis.speak(utt);
+  onEnd();
 }
 
-function speechPause()  { window.speechSynthesis.pause(); _startOffset += (performance.now() - _startedAt) / 1000; }
-function speechResume() { window.speechSynthesis.resume(); _startedAt = performance.now(); }
-function speechCancel() { window.speechSynthesis.cancel(); _startOffset = 0; _startedAt = 0; }
+function speechPause()  {
+  try { window.speechSynthesis.pause(); } catch { /* ignore */ }
+  _startOffset += (performance.now() - _startedAt) / 1000;
+}
+function speechResume() {
+  try { window.speechSynthesis.resume(); } catch { /* ignore */ }
+  _startedAt = performance.now();
+}
+function speechCancel() {
+  try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+  _startOffset = 0; _startedAt = 0;
+}
 function speechElapsed(): number { return _startOffset + (performance.now() - _startedAt) / 1000; }
 
 function formatTime(seconds: number): string {
@@ -521,10 +551,12 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
     if (!audioReady) return;
     const id = setInterval(() => {
       if (!isPlayingRef.current) return;
-      if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      }
+      try {
+        if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }
+      } catch { /* ignore keepalive errors */ }
     }, 10000);
     return () => clearInterval(id);
   }, [audioReady]);
