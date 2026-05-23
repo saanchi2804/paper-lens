@@ -459,36 +459,59 @@ function getPollinationsUrl(prompt: string): string {
 }
 
 export default function VideoPlayer({ script }: { script: PaperScript }) {
-  const playerRef   = useRef<PlayerRef>(null);
-  const isPlayingRef = useRef(false);
+  const playerRef      = useRef<PlayerRef>(null);
+  const isPlayingRef   = useRef(false);
+  const activeSceneRef = useRef(0);        // which scene is currently speaking
+  const speedRef       = useRef(1);        // current playback speed
 
-  const [isPlaying,      setIsPlaying]      = useState(false);
-  const [activeScene,    setActiveScene]    = useState(0);
-  const [currentFrame,   setCurrentFrame]   = useState(0);
-  const [playbackSpeed,  setPlaybackSpeed]  = useState(1);
-  const [audioReady,     setAudioReady]     = useState(false);
-  const [audioLoading,   setAudioLoading]   = useState(true);
-  const [ttsError,       setTtsError]       = useState<string | null>(null);
-  const [sceneImages,    setSceneImages]    = useState<Record<number, string>>({});
+  const [isPlaying,     setIsPlaying]     = useState(false);
+  const [activeScene,   setActiveScene]   = useState(0);
+  const [currentFrame,  setCurrentFrame]  = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [audioReady,    setAudioReady]    = useState(false);
+  const [audioLoading,  setAudioLoading]  = useState(true);
+  const [ttsError,      setTtsError]      = useState<string | null>(null);
+  const [sceneImages,   setSceneImages]   = useState<Record<number, string>>({});
 
-  const totalFrames   = getTotalFrames(script);
-  const sceneOffsets  = useMemo(() => getSceneOffsets(script), [script]);
-  const fullNarration = useMemo(() => script.scenes.map(s => s.narration).join(" "), [script]);
+  const totalFrames  = getTotalFrames(script);
+  const sceneOffsets = useMemo(() => getSceneOffsets(script), [script]);
 
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { speedRef.current = playbackSpeed; }, [playbackSpeed]);
+
+  // ── Speak one scene at a time ────────────────────────────────────────────
+  // Stored in a ref so the onEnd callback always sees the latest version
+  // without stale closures.
+  const speakSceneRef = useRef<(idx: number, offsetSec: number) => void>(() => {});
+  speakSceneRef.current = (idx: number, offsetSec: number) => {
+    if (idx >= script.scenes.length || !isPlayingRef.current) return;
+    activeSceneRef.current = idx;
+    setActiveScene(idx);
+    playerRef.current?.seekTo(sceneOffsets[idx] + Math.round(offsetSec * FPS));
+
+    speechSpeak(script.scenes[idx].narration, offsetSec, speedRef.current, () => {
+      if (!isPlayingRef.current) return;
+      const next = idx + 1;
+      if (next < script.scenes.length) {
+        speakSceneRef.current(next, 0);
+      } else {
+        playerRef.current?.pause();
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+      }
+    });
+  };
 
   // Pre-fetch Pollinations images for image-type scenes
   useEffect(() => {
     const imageScenes = script.scenes.filter(s => s.visual_type === "image" && s.image_prompt);
     if (imageScenes.length === 0) return;
     const updates: Record<number, string> = {};
-    imageScenes.forEach(s => {
-      updates[s.id] = getPollinationsUrl(s.image_prompt!);
-    });
+    imageScenes.forEach(s => { updates[s.id] = getPollinationsUrl(s.image_prompt!); });
     setSceneImages(updates);
   }, [script]);
 
-  // Web Speech API — ready as soon as voices load (no server fetch, no cost)
+  // Web Speech API ready check
   useEffect(() => {
     setAudioLoading(true);
     const tryReady = () => {
@@ -505,48 +528,36 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
     };
   }, []);
 
-
-  // Scene tracker — driven by Remotion frameupdate
+  // Track Remotion frame for progress bar
   useEffect(() => {
     if (!audioReady) return;
     const player = playerRef.current;
     if (!player) return;
-
     const onFrame = (e: { detail: { frame: number } }) => {
-      setActiveScene(sceneAtFrame(e.detail.frame, sceneOffsets));
       setCurrentFrame(e.detail.frame);
     };
-    const onEnded = () => { setIsPlaying(false); isPlayingRef.current = false; };
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (player as any).addEventListener("frameupdate", onFrame);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (player as any).addEventListener("ended", onEnded);
-    return () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (player as any).removeEventListener("frameupdate", onFrame);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (player as any).removeEventListener("ended", onEnded);
-    };
-  }, [sceneOffsets, audioReady]);
+    return () => (player as any).removeEventListener("frameupdate", onFrame);
+  }, [audioReady]);
 
-  // Drift correction — only seek FORWARD (never backward) to avoid repeat glitch.
-  // If speech falls behind Remotion, that's fine; if Remotion falls behind speech, catch up.
+  // Drift correction — nudge Remotion forward if it falls >1.5s behind speech
   useEffect(() => {
     if (!audioReady) return;
     const id = setInterval(() => {
       if (!isPlayingRef.current) return;
-      const targetFrame = Math.round(speechElapsed() * FPS);
+      const sceneSpeechSec = speechElapsed();
+      const targetFrame = Math.round(sceneOffsets[activeSceneRef.current] + sceneSpeechSec * FPS);
       const actualFrame = playerRef.current?.getCurrentFrame() ?? 0;
-      // Only advance Remotion forward — never rewind it based on speech timing
       if (targetFrame - actualFrame > FPS * 1.5) {
         playerRef.current?.seekTo(Math.min(targetFrame, totalFrames - 1));
       }
-    }, 1500);
+    }, 1000);
     return () => clearInterval(id);
-  }, [audioReady, totalFrames]);
+  }, [audioReady, sceneOffsets, totalFrames]);
 
-  // Chrome/WebKit keepalive — prevents speech from silently cutting off mid-utterance
+  // Chrome/WebKit keepalive — prevents silent cutoff within a scene
   useEffect(() => {
     if (!audioReady) return;
     const id = setInterval(() => {
@@ -556,76 +567,76 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
           window.speechSynthesis.pause();
           window.speechSynthesis.resume();
         }
-      } catch { /* ignore keepalive errors */ }
-    }, 10000);
+      } catch { /* ignore */ }
+    }, 8000);
     return () => clearInterval(id);
   }, [audioReady]);
 
   const handlePlay = useCallback(() => {
-    const frame = playerRef.current?.getCurrentFrame() ?? 0;
-    const offsetSec = frame / FPS;
-    if (offsetSec > 0) {
-      // Resuming from mid-way — restart speech from approximate position
-      speechSpeak(fullNarration, offsetSec, playbackSpeed, () => {
-        setIsPlaying(false); isPlayingRef.current = false;
-      });
-    } else {
-      speechSpeak(fullNarration, 0, playbackSpeed, () => {
-        setIsPlaying(false); isPlayingRef.current = false;
-      });
-    }
-    playerRef.current?.play();
+    const frame    = playerRef.current?.getCurrentFrame() ?? 0;
+    const sceneIdx = sceneAtFrame(frame, sceneOffsets);
+    const offsetSec = (frame - sceneOffsets[sceneIdx]) / FPS;
+    isPlayingRef.current = true;
     setIsPlaying(true);
-  }, [fullNarration, playbackSpeed]);
+    playerRef.current?.play();
+    speakSceneRef.current(sceneIdx, offsetSec);
+  }, [sceneOffsets]);
 
   const handlePause = useCallback(() => {
     playerRef.current?.pause();
     speechPause();
     setIsPlaying(false);
+    isPlayingRef.current = false;
   }, []);
 
   const handleRestart = useCallback(() => {
-    speechSpeak(fullNarration, 0, playbackSpeed, () => {
-      setIsPlaying(false); isPlayingRef.current = false;
-    });
-    playerRef.current?.seekTo(0);
-    playerRef.current?.play();
+    isPlayingRef.current = true;
     setIsPlaying(true);
     setActiveScene(0);
-  }, [fullNarration, playbackSpeed]);
+    setCurrentFrame(0);
+    playerRef.current?.seekTo(0);
+    playerRef.current?.play();
+    speakSceneRef.current(0, 0);
+  }, []);
 
   const handleRewind = useCallback(() => {
-    const newFrame = Math.max(0, (playerRef.current?.getCurrentFrame() ?? 0) - 10 * FPS);
-    const newSec = newFrame / FPS;
-    speechSpeak(fullNarration, newSec, playbackSpeed, () => {
-      setIsPlaying(false); isPlayingRef.current = false;
-    });
+    const frame    = playerRef.current?.getCurrentFrame() ?? 0;
+    const newFrame = Math.max(0, frame - 10 * FPS);
+    const sceneIdx = sceneAtFrame(newFrame, sceneOffsets);
+    const offsetSec = (newFrame - sceneOffsets[sceneIdx]) / FPS;
     playerRef.current?.seekTo(newFrame);
-    if (isPlayingRef.current) playerRef.current?.play();
-  }, [fullNarration, playbackSpeed]);
+    setCurrentFrame(newFrame);
+    if (isPlayingRef.current) {
+      playerRef.current?.play();
+      speakSceneRef.current(sceneIdx, offsetSec);
+    }
+  }, [sceneOffsets]);
 
   const handleSpeedChange = useCallback((speed: number) => {
     setPlaybackSpeed(speed);
+    speedRef.current = speed;
     if (isPlayingRef.current) {
-      const frame = playerRef.current?.getCurrentFrame() ?? 0;
-      speechSpeak(fullNarration, frame / FPS, speed, () => {
-        setIsPlaying(false); isPlayingRef.current = false;
-      });
+      // Restart current scene from current position with new speed
+      const frame    = playerRef.current?.getCurrentFrame() ?? 0;
+      const sceneIdx = sceneAtFrame(frame, sceneOffsets);
+      const offsetSec = (frame - sceneOffsets[sceneIdx]) / FPS;
+      speakSceneRef.current(sceneIdx, offsetSec);
     }
-  }, [fullNarration]);
+  }, [sceneOffsets]);
 
   const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetFrame = Math.round(ratio * totalFrames);
-    const targetSec = targetFrame / FPS;
-    speechSpeak(fullNarration, targetSec, playbackSpeed, () => {
-      setIsPlaying(false); isPlayingRef.current = false;
-    });
+    const sceneIdx  = sceneAtFrame(targetFrame, sceneOffsets);
+    const offsetSec = (targetFrame - sceneOffsets[sceneIdx]) / FPS;
     playerRef.current?.seekTo(targetFrame);
-    if (isPlayingRef.current) playerRef.current?.play();
     setCurrentFrame(targetFrame);
-  }, [totalFrames, fullNarration, playbackSpeed]);
+    if (isPlayingRef.current) {
+      playerRef.current?.play();
+      speakSceneRef.current(sceneIdx, offsetSec);
+    }
+  }, [totalFrames, sceneOffsets]);
 
 
   return (
