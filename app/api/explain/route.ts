@@ -170,8 +170,73 @@ ${pdfText}`;
     }
 
     script.scenes = script.scenes
-      .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim())
-      .map((scene: Scene) => ({ ...scene, duration_seconds: wordsToSeconds(scene.narration) }));
+      .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim());
+
+    // ── Passes 2 & 3: Expand short narrations ────────────────────────────────
+    // GLM Air writes ~100 words regardless of instructions. We run two focused
+    // expansion passes. Each pass appends concrete additions to scenes still
+    // under the target length — rather than asking for a full rewrite, we
+    // instruct the model to ADD specific content types so it can't shorten.
+    async function expandNarrations(scenes: Scene[], minWords: number): Promise<void> {
+      const short = scenes.filter(
+        s => s.narration.trim().split(/\s+/).length < minWords
+      );
+      if (short.length === 0) return;
+
+      const sceneList = short.map(s =>
+        `ID ${s.id} [${s.type}]: ${s.narration}`
+      ).join("\n\n---\n\n");
+
+      const expandPrompt = `You are Saisha, an enthusiastic professor. For each lecture excerpt below, ADD the following content AFTER the existing text (do not shorten or rewrite what's already there). Write as flowing prose — NO bullet labels, NO "A)", NO "B)" in the output:
+
+- An everyday analogy using a non-academic comparison the student has experienced personally (2-3 sentences).
+- A "You might be wondering..." moment addressing the most likely student confusion (2-3 sentences).
+- A concrete specific detail — a number, name, or result from the research (1-2 sentences).
+- A one-sentence bridge to what comes next.
+
+Return ONLY a JSON array, no markdown:
+[{"id": 1, "narration": "original text seamlessly extended with your additions"}, ...]
+
+Excerpts:
+
+${sceneList}`;
+
+      try {
+        const res = await client.messages.create({
+          model: "glm-4.5-air",
+          max_tokens: 8000,
+          messages: [{ role: "user", content: expandPrompt }],
+        });
+        const raw = res.content[0].type === "text" ? res.content[0].text : "";
+        let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+        const m = cleaned.match(/\[[\s\S]*\]/);
+        if (m) cleaned = m[0];
+        const expanded: { id: number; narration: string }[] = JSON.parse(cleaned);
+        expanded.forEach(e => {
+          const scene = scenes.find(s => s.id === e.id);
+          if (scene && typeof e.narration === "string") {
+            const cleaned = e.narration
+              .replace(/\b[A-D]\)\s*/g, "")   // strip any A) B) C) D) labels
+              .replace(/\s+/g, " ").trim();
+            const ew = cleaned.split(/\s+/).length;
+            if (ew > scene.narration.trim().split(/\s+/).length) {
+              scene.narration = cleaned;
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("[explain] expansion pass failed:", err);
+      }
+    }
+
+    await expandNarrations(script.scenes, 180);  // pass 2: expand anything under 180
+    await expandNarrations(script.scenes, 220);  // pass 3: expand anything still under 220
+
+    // Compute durations after final narrations are set
+    script.scenes = script.scenes.map((scene: Scene) => ({
+      ...scene,
+      duration_seconds: wordsToSeconds(scene.narration),
+    }));
 
     return Response.json(script);
   } catch (err) {
