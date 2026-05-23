@@ -7,7 +7,9 @@ export const maxDuration = 60; // Vercel hobby plan max
 
 function wordsToSeconds(text: string): number {
   const words = text.trim().split(/\s+/).length;
-  return Math.max(75, Math.round((words / 110) * 60));
+  // TTS voices typically speak at ~140-160 wpm; use 140 so Remotion slides
+  // stay visible long enough even if TTS is faster than average.
+  return Math.max(90, Math.round((words / 140) * 60));
 }
 
 export async function POST(request: NextRequest) {
@@ -28,26 +30,33 @@ export async function POST(request: NextRequest) {
       .trim()
       .slice(0, 10000);
 
-    const prompt = `You are Saisha, a university professor creating a thorough 12-minute instructional video explaining a research paper. Be clear, concrete, and deeply engaging. Never rush — take time to build intuition.
+    const prompt = `You are Saisha, a beloved university professor known for making even the hardest research papers click for students. You are recording a 12-15 minute lecture video. Your teaching style:
+
+- You THINK OUT LOUD. You say things like "Now, here's the tricky part..." or "You might be wondering..." or "Let me slow down here because this is where most people get lost."
+- You use EVERYDAY ANALOGIES before technical language. Introduce the intuition first, jargon second.
+- You ANTICIPATE confusion and address it head-on: "This seems obvious, but actually it's not, because..."
+- You REPEAT key ideas in different words: once with an example, once with an analogy, once as a principle.
+- You speak in SHORT, PUNCHY sentences. No walls of text. Mix rhythm.
+- You are genuinely EXCITED about the research. Your enthusiasm is contagious.
 
 Return ONLY valid JSON, no markdown fences, no text outside the JSON.
 
 SCENE SEQUENCE — exactly 10 scenes in this order:
 intro, hook, prerequisite, example, concept, deep_dive, worked_example, finding, implication, summary
 
-RULES:
-1. Open with a real-world puzzle or phenomenon — never "This paper..."
-2. prerequisite: teach the background concept from scratch with TWO concrete mini-examples
-3. example: introduce ONE specific case/participant/condition from the paper — return to it in every later scene
-4. concept: wrong assumption → why it fails → correct concept — use an analogy to make it click
-5. deep_dive: go beneath the surface — explain the mechanism or algorithm in detail, why the authors designed it this way, what alternatives they rejected
-6. worked_example: walk through the actual method step by step with real numbers, showing intermediate results
-7. finding: cite exact statistics — never "performed better", say "scored 7.3 vs 5.8, p < .05" — explain WHY the result matters
-8. implication: what this changes in the real world — who should care, what they should do differently, what's still unsolved
-9. summary: crystallize the 3 key ideas a student must remember, connect back to the opening puzzle
-10. End each scene with one sentence of anticipation that makes the viewer want to keep watching
+SCENE INSTRUCTIONS:
+1. intro — Open with a real-world puzzle or surprising phenomenon that this paper solves. Never start with "This paper...". Hook the viewer in the first sentence.
+2. hook — Show why the problem is HARD. What have people tried before? Why did it fail? Make the viewer feel the pain of the unsolved problem.
+3. prerequisite — Teach the ONE background concept a student needs from absolute scratch. Use a concrete everyday example first, then a second example from a different domain. Don't assume anything.
+4. example — Introduce ONE specific case, participant, dataset, or experiment from the paper. Be concrete: names, numbers, conditions. Refer back to this exact example in every scene that follows.
+5. concept — Walk through the core idea. Start with the WRONG assumption most people make → explain exactly why it breaks down → reveal the correct concept. Use an analogy the student has never forgotten.
+6. deep_dive — Go beneath the surface of the method. Explain the mechanism step by step: what inputs go in, what computation happens, what comes out. Explain WHY the authors made this design choice and what the alternatives were.
+7. worked_example — Using the specific example from scene 4, walk through the method with real numbers. Show intermediate calculations. Make it concrete enough that a student could reproduce it on paper.
+8. finding — Report the key results with EXACT statistics from the paper (e.g. "84.3% vs 71.2%, p < .001"). Then explain what those numbers actually mean for a practitioner — not just that it's better, but why that margin matters.
+9. implication — What changes in the real world because of this paper? Who should act differently — a clinician, an engineer, a policymaker? What open questions remain? What would the next experiment be?
+10. summary — Crystallize exactly 3 things the student must walk away knowing. Connect each back to the opening puzzle from scene 1. End with why this matters beyond the paper.
 
-NARRATION: 130-160 words per scene. Natural, direct sentences. Mix short punchy sentences with longer explanatory ones. Talk like a brilliant professor who genuinely loves this material.
+NARRATION LENGTH: 220-260 words per scene. This is non-negotiable — short narrations make the video feel rushed and shallow. Count your words. Each scene should feel like a complete mini-lecture, not a bullet point read aloud.
 
 ━━━ VISUAL SPECIFICATION ━━━
 For each scene choose the visual type that BEST ILLUSTRATES the concept. The visual must explain and illuminate — not echo the words. Ask: what would a professor draw on a whiteboard to make this click?
@@ -143,7 +152,7 @@ ${pdfText}`;
 
     const response = await client.messages.create({
       model: "glm-4.5-air",
-      max_tokens: 8000,
+      max_tokens: 12000,
       messages: [{ role: "user", content: prompt }],
     });
 
