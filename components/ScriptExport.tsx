@@ -10,17 +10,20 @@ const TYPE_COLOR: Record<SceneType, string> = {
   example:        "#38bdf8",
   concept:        "#c084fc",
   analogy:        "#4ade80",
+  deep_dive:      "#f472b6",
   worked_example: "#a3e635",
   finding:        "#34d399",
   connection:     "#fbbf24",
+  implication:    "#f97316",
   summary:        "#e879f9",
 };
 
 const TYPE_LABEL: Record<SceneType, string> = {
   intro: "Intro", prerequisite: "Foundations", hook: "Hook",
   example: "Example", concept: "Concept", analogy: "Analogy",
-  worked_example: "Worked Example", finding: "Finding",
-  connection: "Connection", summary: "Summary",
+  deep_dive: "Deep Dive", worked_example: "Worked Example",
+  finding: "Finding", connection: "Connection",
+  implication: "Implications", summary: "Summary",
 };
 
 function formatTime(seconds: number) {

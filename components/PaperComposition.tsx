@@ -9,17 +9,20 @@ const ACCENT: Record<SceneType, string> = {
   example:        "#0284c7",
   concept:        "#7c3aed",
   analogy:        "#16a34a",
+  deep_dive:      "#db2777",
   worked_example: "#65a30d",
   finding:        "#059669",
   connection:     "#d97706",
+  implication:    "#ea580c",
   summary:        "#9333ea",
 };
 
 const LABEL: Record<SceneType, string> = {
   intro: "INTRO", prerequisite: "FOUNDATIONS", hook: "HOOK",
   example: "EXAMPLE", concept: "CONCEPT", analogy: "ANALOGY",
-  worked_example: "WORKED EXAMPLE", finding: "FINDING",
-  connection: "CONNECTION", summary: "SUMMARY",
+  deep_dive: "DEEP DIVE", worked_example: "WORKED EXAMPLE",
+  finding: "FINDING", connection: "CONNECTION",
+  implication: "IMPLICATIONS", summary: "SUMMARY",
 };
 
 // ─── DIAGRAM ─────────────────────────────────────────────────────────────────

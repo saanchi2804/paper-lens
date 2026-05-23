@@ -128,9 +128,11 @@ function buildImagePrompt(scene: { type: string; narration: string; headline: st
     example:        "concrete example diagram with labeled steps, showing the specific example being explained",
     concept:        "concept explanation diagram with labeled components and connecting arrows, like a textbook figure",
     analogy:        "side-by-side analogy comparison, two labeled panels showing real-world parallel",
+    deep_dive:      "detailed mechanism diagram, internal components labeled with arrows, technical cross-section style",
     worked_example: "step-by-step worked example, showing each calculation or logic step numbered and labeled",
     finding:        "results comparison chart with actual numbers, bar chart or table showing improvement",
     connection:     "concept map showing connections between ideas, labeled relationship diagram",
+    implication:    "real-world impact diagram, before-and-after comparison, applications in practice labeled",
     summary:        "summary slide with key takeaways listed, what was learned overview",
   };
   const style = styleByType[scene.type] ?? "educational teaching diagram, labeled components";
@@ -144,17 +146,20 @@ const SLIDE_ACCENT: Record<SceneType, string> = {
   example:        "#38bdf8",
   concept:        "#c084fc",
   analogy:        "#4ade80",
+  deep_dive:      "#f472b6",
   worked_example: "#a3e635",
   finding:        "#34d399",
   connection:     "#fbbf24",
+  implication:    "#f97316",
   summary:        "#e879f9",
 };
 
 const SLIDE_LABEL: Record<SceneType, string> = {
   intro: "INTRO", prerequisite: "FOUNDATIONS", hook: "HOOK",
   example: "EXAMPLE", concept: "CONCEPT", analogy: "ANALOGY",
-  worked_example: "WORKED EXAMPLE", finding: "FINDING",
-  connection: "CONNECTION", summary: "SUMMARY",
+  deep_dive: "DEEP DIVE", worked_example: "WORKED EXAMPLE",
+  finding: "FINDING", connection: "CONNECTION",
+  implication: "IMPLICATIONS", summary: "SUMMARY",
 };
 
 function parseNotes(notes: string[]) {

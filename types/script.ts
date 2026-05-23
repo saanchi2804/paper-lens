@@ -5,9 +5,11 @@ export type SceneType =
   | "example"
   | "concept"
   | "analogy"
+  | "deep_dive"
   | "worked_example"
   | "finding"
   | "connection"
+  | "implication"
   | "summary";
 
 export type RenderVisualType = "diagram" | "chart" | "image";
