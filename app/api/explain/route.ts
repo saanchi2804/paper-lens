@@ -70,6 +70,8 @@ PUNCH LINE: every scene must include "punch_line" — its single most striking p
 
 MOTIF: at the top level include "motif_emoji" — ONE emoji representing the protagonist's world (e.g. 🏪 for a store manager). It appears as a badge on every scene for continuity.
 
+ILLUSTRATION: EVERY scene (regardless of visual_type) must include "image_prompt" — 15-25 words describing an illustrated SCENE from the story: characters, creatures, environments, objects in action. Think of it as the animation frame behind the narration, NOT a diagram. Show the protagonist's world, the phenomenon itself, the stakes. For a dinosaur paper: dinosaurs in their habitat. For a medical paper: the patient, the cells, the hospital. Never describe charts, boxes, arrows, or text in image_prompt. Keep subject matter consistent across all 10 scenes so it feels like one illustrated film.
+
 ━━━ VISUAL SPECIFICATION ━━━
 For each scene choose the visual type that BEST ILLUSTRATES the concept. The visual must explain and illuminate — not echo the words. Ask: what would a professor draw on a whiteboard to make this click?
 

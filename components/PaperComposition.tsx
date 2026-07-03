@@ -571,6 +571,13 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   const punchScale = interpolate(localFrame, [punchStart, punchStart + 14], [0.82, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const showPunch  = !!scene.punch_line && punchT > 0.001;
 
+  // Illustration backdrop: slow cinematic pan-zoom; hero-bright on image
+  // scenes, dimmed under charts/diagrams so foreground stays readable
+  const isImageScene = (scene.visual_type ?? "diagram") === "image";
+  const bgPan   = interpolate(localFrame, [0, totalFrames], [-2.5, 2.5], { extrapolateRight: "clamp" });
+  const bgScale = 1.1 + interpolate(localFrame, [0, totalFrames], [0, 0.06], { extrapolateRight: "clamp" });
+  const bgOpacity = isImageScene ? 0.85 : 0.22;
+
   return (
     <AbsoluteFill style={{
       background: `radial-gradient(130% 110% at 50% -10%, ${accent}1f, transparent 55%), radial-gradient(100% 80% at 85% 110%, ${accent}12, transparent 50%), ${BG_BASE}`,
@@ -578,11 +585,30 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
       display: "flex", flexDirection: "column",
       opacity: fadeIn * fadeOut,
     }}>
+      {/* Illustrated backdrop — plain <img> so a slow load never stalls playback */}
+      {imageUrl && (
+        <AbsoluteFill style={{ overflow: "hidden", zIndex: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="" style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            opacity: bgOpacity,
+            transform: `scale(${bgScale}) translateX(${bgPan}%)`,
+          }} />
+          {/* Legibility gradients: darken edges and bottom */}
+          <AbsoluteFill style={{
+            background: isImageScene
+              ? `linear-gradient(180deg, ${BG_BASE}cc 0%, transparent 30%, transparent 62%, ${BG_BASE}f2 100%)`
+              : `linear-gradient(180deg, ${BG_BASE}d8 0%, ${BG_BASE}99 35%, ${BG_BASE}b8 100%)`,
+          }} />
+        </AbsoluteFill>
+      )}
+
       {/* Full-bleed content with Ken Burns drift */}
       <div style={{
         flex: 1, display: "flex", flexDirection: "column",
         transform: `translateY(${slideIn}px) scale(${kenBurns})`,
         overflow: "hidden",
+        position: "relative", zIndex: 10,
       }}>
         {/* Header */}
         <div style={{
@@ -618,7 +644,25 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           overflow: "hidden", minHeight: 0,
         }}>
           <div style={{ width: "100%", maxWidth: 1080, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
+            {isImageScene && imageUrl ? (
+              /* Illustration IS the hero — float its labels over the backdrop */
+              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "flex-end", justifyContent: "flex-start", paddingBottom: 18, gap: 10, flexWrap: "wrap" }}>
+                {(scene.image_labels ?? []).slice(0, 3).map((l, i) => {
+                  const anim = popIn(localFrame, 1 + i);
+                  return (
+                    <span key={i} style={{
+                      background: `${BG_BASE}d8`, color: TEXT_HI,
+                      border: `1.5px solid ${accent}66`,
+                      borderRadius: 12, padding: "10px 22px",
+                      fontSize: 20, fontWeight: 700,
+                      opacity: anim.opacity, transform: `translateY(${anim.shift}px)`,
+                    }}>{l}</span>
+                  );
+                })}
+              </div>
+            ) : (
+              <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
+            )}
           </div>
         </div>
 

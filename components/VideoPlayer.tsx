@@ -458,9 +458,9 @@ function SceneSlide({ scene, imageUrl }: { scene: Scene; imageUrl?: string }) {
   );
 }
 
-function getPollinationsUrl(prompt: string): string {
-  const styled = `${prompt}, no text, no letters, no words, clean technical illustration, white background`;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(styled)}?width=800&height=450&nologo=true`;
+function getPollinationsUrl(prompt: string, seed: number): string {
+  const styled = `${prompt}, flat vector illustration, kurzgesagt style, minimalist shapes, vibrant colors, dark navy background, cinematic lighting, no text, no letters, no words`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(styled)}?width=1280&height=720&nologo=true&seed=${seed}`;
 }
 
 export default function VideoPlayer({ script }: { script: PaperScript }) {
@@ -507,13 +507,17 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
     });
   };
 
-  // Pre-fetch Pollinations images for image-type scenes
+  // Pre-fetch a Pollinations illustration for EVERY scene — it becomes the
+  // animated backdrop. Stable seed keeps the style consistent per video.
   useEffect(() => {
-    const imageScenes = script.scenes.filter(s => s.visual_type === "image" && s.image_prompt);
-    if (imageScenes.length === 0) return;
     const updates: Record<number, string> = {};
-    imageScenes.forEach(s => { updates[s.id] = getPollinationsUrl(s.image_prompt!); });
+    script.scenes.forEach(s => {
+      const prompt = s.image_prompt ?? buildImagePrompt(s);
+      updates[s.id] = getPollinationsUrl(prompt, 1000 + s.id * 17);
+    });
     setSceneImages(updates);
+    // Warm the browser cache so images are ready when their scene starts
+    Object.values(updates).forEach(url => { const img = new Image(); img.src = url; });
   }, [script]);
 
   // Web Speech API ready check
