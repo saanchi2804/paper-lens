@@ -60,10 +60,17 @@ export interface Scene {
   // image: AI-generated illustration
   image_prompt?: string;
   image_labels?: string[];
+
+  // kinetic text: the scene's single most striking phrase, flashed big
+  // mid-scene (e.g. "847% ROI", "8 reports max")
+  punch_line?: string;
 }
 
 export interface PaperScript {
   title: string;
   summary: string;
+  // single emoji representing the story's protagonist/setting, shown as a
+  // persistent badge for visual continuity across scenes
+  motif_emoji?: string;
   scenes: Scene[];
 }

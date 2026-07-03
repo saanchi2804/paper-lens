@@ -66,6 +66,10 @@ SCENE INSTRUCTIONS:
 
 NARRATION LENGTH: 190-230 words per scene (~13-15 min total at speaking pace). Count your words. Each scene should feel like a complete chapter of the story, not a bullet point read aloud.
 
+PUNCH LINE: every scene must include "punch_line" — its single most striking phrase, 2-6 words, exactly as it should flash full-screen mid-scene (e.g. "847% ROI", "8 reports. No more.", "The manager IS the leverage"). Prefer a number when the scene has one. It must also appear verbatim in that scene's narration so the flash lands as the words are spoken.
+
+MOTIF: at the top level include "motif_emoji" — ONE emoji representing the protagonist's world (e.g. 🏪 for a store manager). It appears as a badge on every scene for continuity.
+
 ━━━ VISUAL SPECIFICATION ━━━
 For each scene choose the visual type that BEST ILLUSTRATES the concept. The visual must explain and illuminate — not echo the words. Ask: what would a professor draw on a whiteboard to make this click?
 
@@ -107,6 +111,7 @@ For each scene choose the visual type that BEST ILLUSTRATES the concept. The vis
 {
   "title": "...",
   "summary": "...",
+  "motif_emoji": "🏪",
   "scenes": [
     {
       "id": 1,
@@ -115,6 +120,7 @@ For each scene choose the visual type that BEST ILLUSTRATES the concept. The vis
       "headline": "...",
       "key_terms": ["term1", "term2"],
       "emoji": "👩‍🏫",
+      "punch_line": "847% ROI",
       "visual_type": "diagram",
       "visual_notes": ["Write: ...", "Write: ...", "Arrow: from ... to ...", "Circle: ..."]
     },

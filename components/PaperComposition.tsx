@@ -2,20 +2,28 @@
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig, Sequence, Img } from "remotion";
 import { PaperScript, Scene, SceneType } from "@/types/script";
 
+// Bright 400-series accents — designed for the dark full-bleed background
 const ACCENT: Record<SceneType, string> = {
-  intro:          "#7c3aed",
-  prerequisite:   "#2563eb",
-  hook:           "#ea580c",
-  example:        "#0284c7",
-  concept:        "#7c3aed",
-  analogy:        "#16a34a",
-  deep_dive:      "#db2777",
-  worked_example: "#65a30d",
-  finding:        "#059669",
-  connection:     "#d97706",
-  implication:    "#ea580c",
-  summary:        "#9333ea",
+  intro:          "#a78bfa",
+  prerequisite:   "#60a5fa",
+  hook:           "#fb923c",
+  example:        "#38bdf8",
+  concept:        "#c084fc",
+  analogy:        "#4ade80",
+  deep_dive:      "#f472b6",
+  worked_example: "#a3e635",
+  finding:        "#34d399",
+  connection:     "#fbbf24",
+  implication:    "#fb923c",
+  summary:        "#e879f9",
 };
+
+// Dark theme surface colors
+const BG_BASE   = "#0b0e1f";
+const SURFACE   = "#151936";
+const TEXT_HI   = "#f1f5f9";
+const TEXT_MID  = "#cbd5e1";
+const TEXT_LOW  = "#8b93b8";
 
 const LABEL: Record<SceneType, string> = {
   intro: "INTRO", prerequisite: "FOUNDATIONS", hook: "HOOK",
@@ -142,7 +150,7 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
           <polygon points="0 0, 10 3.5, 0 7" fill={accent} opacity={0.8} />
         </marker>
         <filter id="node-shadow" x="-20%" y="-30%" width="140%" height="160%">
-          <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor={accent} floodOpacity="0.15" />
+          <feDropShadow dx="0" dy="0" stdDeviation="8" floodColor={accent} floodOpacity="0.35" />
         </filter>
       </defs>
       {edges.map((e, i) => {
@@ -179,10 +187,10 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
                 fill={`${accent}12`} stroke={accent} strokeWidth={3.5} strokeDasharray="10,5" opacity={0.9 * ringDraw} />
             )}
             <rect x={p.x-w/2} y={p.y-BH/2} width={w} height={BH} rx={14}
-              fill={isPrimary ? `${accent}1a` : "#ffffff"}
+              fill={isPrimary ? `${accent}26` : SURFACE}
               stroke={accent} strokeWidth={isPrimary ? 3 : 2.2} filter="url(#node-shadow)" />
             <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle"
-              fill="#111827" fontSize={fs}
+              fill={TEXT_HI} fontSize={fs}
               fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
               fontWeight={isPrimary ? "700" : "600"}>
               {n.length > 26 ? n.slice(0, 25) + "…" : n}
@@ -193,7 +201,7 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
       {labels.slice(0, 2).map((l, i) => {
         const anim = popIn(localFrame, nodes.length + 1.6 + i * 0.5);
         return (
-          <text key={i} x={W/2} y={H - 10 - i * 26} textAnchor="middle" fill="#6b7280" fontSize={18}
+          <text key={i} x={W/2} y={H - 10 - i * 26} textAnchor="middle" fill={TEXT_LOW} fontSize={18}
             fontFamily="system-ui" fontStyle="italic" opacity={anim.opacity}>
             {l.length > 65 ? l.slice(0, 63) + "…" : l}
           </text>
@@ -223,8 +231,8 @@ function LayersChart({ title, layers, accent, localFrame }: {
       )}
       {displayed.map((layer, i) => {
         const depth = i / Math.max(count - 1, 1);
-        const bg = `color-mix(in srgb, ${accent} ${8 + depth * 14}%, #ffffff)`;
-        const borderColor = `color-mix(in srgb, ${accent} ${30 + depth * 40}%, transparent)`;
+        const bg = `color-mix(in srgb, ${accent} ${10 + depth * 16}%, ${SURFACE})`;
+        const borderColor = `color-mix(in srgb, ${accent} ${35 + depth * 40}%, transparent)`;
         const anim = popIn(localFrame, i + 0.7);
         return (
           <div key={i} style={{
@@ -239,9 +247,9 @@ function LayersChart({ title, layers, accent, localFrame }: {
             opacity: anim.opacity,
             transform: `translateY(${-anim.shift}px)`,
           }}>
-            <span style={{ fontSize: 24, fontWeight: 700, color: "#111827" }}>{layer.label}</span>
+            <span style={{ fontSize: 24, fontWeight: 700, color: TEXT_HI }}>{layer.label}</span>
             {layer.sublabel && (
-              <span style={{ fontSize: 17, color: "#6b7280", fontStyle: "italic" }}>{layer.sublabel}</span>
+              <span style={{ fontSize: 17, color: TEXT_LOW, fontStyle: "italic" }}>{layer.sublabel}</span>
             )}
           </div>
         );
@@ -269,18 +277,19 @@ function BarChart({ bars, accent, localFrame }: {
         const valueText = unit.length <= 3 ? `${shown}${unit}` : `${shown}`;
         return (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 18, opacity: anim.opacity, transform: `translateY(${anim.shift}px)` }}>
-            <div style={{ width: 250, fontSize: 21, fontWeight: bar.highlight ? 700 : 500, color: bar.highlight ? "#111827" : "#4b5563", textAlign: "right", flexShrink: 0, lineHeight: 1.25 }}>
+            <div style={{ width: 250, fontSize: 21, fontWeight: bar.highlight ? 700 : 500, color: bar.highlight ? TEXT_HI : TEXT_LOW, textAlign: "right", flexShrink: 0, lineHeight: 1.25 }}>
               {bar.label}
             </div>
-            <div style={{ flex: 1, background: "#eef1f6", borderRadius: 10, height: 54, overflow: "hidden" }}>
+            <div style={{ flex: 1, background: "#ffffff12", borderRadius: 10, height: 54, overflow: "hidden" }}>
               <div style={{
                 width: `${Math.max(3, (bar.value / max) * 100) * grow}%`,
                 height: "100%",
                 background: bar.highlight ? accent : `${accent}55`,
                 borderRadius: 10,
+                boxShadow: bar.highlight ? `0 0 24px ${accent}66` : undefined,
               }} />
             </div>
-            <div style={{ width: 140, fontSize: 27, fontWeight: 800, color: bar.highlight ? accent : "#374151", flexShrink: 0 }}>
+            <div style={{ width: 140, fontSize: 27, fontWeight: 800, color: bar.highlight ? accent : TEXT_MID, flexShrink: 0 }}>
               {valueText}
             </div>
           </div>
@@ -305,19 +314,20 @@ function ComparisonChart({ columns, accent, localFrame }: {
         return (
           <div key={ci} style={{
             flex: 1,
-            border: `3px solid ${ci === 1 ? accent : "#e5e7eb"}`,
+            border: `3px solid ${ci === 1 ? accent : "#2a2f52"}`,
             borderRadius: 16,
             overflow: "hidden",
-            background: "#ffffff",
+            background: SURFACE,
+            boxShadow: ci === 1 ? `0 0 40px ${accent}33` : undefined,
             opacity: colAnim.opacity,
             transform: `translateY(${colAnim.shift}px)`,
           }}>
             <div style={{
-              background: ci === 1 ? accent : "#f9fafb",
-              color: ci === 1 ? "#fff" : "#374151",
+              background: ci === 1 ? accent : "#1c2144",
+              color: ci === 1 ? "#0b0e1f" : TEXT_MID,
               fontSize: 21, fontWeight: 700, textAlign: "center",
               padding: "16px 20px",
-              borderBottom: `1px solid ${ci === 1 ? `${accent}44` : "#e5e7eb"}`,
+              borderBottom: `1px solid ${ci === 1 ? `${accent}44` : "#2a2f52"}`,
             }}>
               {col.heading}
             </div>
@@ -326,10 +336,10 @@ function ComparisonChart({ columns, accent, localFrame }: {
                 const itemAnim = popIn(localFrame, 1.4 + ii * 0.7 + ci * 0.35);
                 return (
                   <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 13, opacity: itemAnim.opacity, transform: `translateX(${ci === 1 ? itemAnim.shift : -itemAnim.shift}px)` }}>
-                    <span style={{ color: ci === 1 ? accent : "#9ca3af", fontSize: 21, marginTop: 0, fontWeight: 700 }}>
+                    <span style={{ color: ci === 1 ? accent : TEXT_LOW, fontSize: 21, marginTop: 0, fontWeight: 700 }}>
                       {ci === 1 ? "✓" : "✗"}
                     </span>
-                    <span style={{ fontSize: 19, color: "#374151", lineHeight: 1.45 }}>{item}</span>
+                    <span style={{ fontSize: 19, color: TEXT_MID, lineHeight: 1.45 }}>{item}</span>
                   </div>
                 );
               })}
@@ -374,7 +384,7 @@ function StatHighlight({ stat, context, accent, extraBars, localFrame }: {
           {displayStat.length > 18 ? displayStat.slice(0, 17) + "…" : displayStat}
         </div>
         {context && (
-          <div style={{ fontSize: 24, color: "#6b7280", marginTop: 16, fontWeight: 600, opacity: ctxAnim.opacity }}>{context}</div>
+          <div style={{ fontSize: 24, color: TEXT_LOW, marginTop: 16, fontWeight: 600, opacity: ctxAnim.opacity }}>{context}</div>
         )}
       </div>
       {extraBars && extraBars.length > 0 && (
@@ -420,7 +430,7 @@ function TimelineChart({ events, accent, localFrame }: { events: string[]; accen
             </div>
             {/* Label */}
             <div style={{
-              marginTop: 18, fontSize: 18, fontWeight: 600, color: "#374151",
+              marginTop: 18, fontSize: 18, fontWeight: 600, color: TEXT_MID,
               textAlign: "center", padding: "0 12px", lineHeight: 1.4,
               opacity: anim.opacity,
             }}>
@@ -490,8 +500,29 @@ function SceneVisual({ scene, imageUrl, accent, localFrame }: {
   // fallback to diagram
   const notes = scene.visual_notes ?? [];
   const { writes, arrows } = parseNotes(notes);
-  if (writes.length === 0 && arrows.length === 0) return null;
-  return <ConceptDiagram notes={notes} accent={accent} localFrame={localFrame} />;
+  if (writes.length > 0 || arrows.length > 0) {
+    return <ConceptDiagram notes={notes} accent={accent} localFrame={localFrame} />;
+  }
+
+  // Last resort (e.g. image scene whose image hasn't loaded): big emoji +
+  // key phrase so the frame is never empty.
+  const anim = popIn(localFrame, 0);
+  const termAnim = popIn(localFrame, 1.2);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28 }}>
+      <div style={{ fontSize: 130, lineHeight: 1, opacity: anim.opacity, transform: `scale(${anim.scale})` }}>
+        {scene.emoji}
+      </div>
+      {scene.punch_line && (
+        <div style={{
+          fontSize: 44, fontWeight: 800, color: accent, textAlign: "center",
+          padding: "0 60px", lineHeight: 1.2, opacity: termAnim.opacity,
+        }}>
+          {scene.punch_line}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── SUBTITLE ─────────────────────────────────────────────────────────────────
@@ -506,10 +537,11 @@ function toLines(narration: string, wordsPerLine = 10): string[] {
 
 // ─── SCENE VIEW ───────────────────────────────────────────────────────────────
 
-function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScenes, imageUrl }: {
+function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScenes, imageUrl, motifEmoji }: {
   scene: Scene; localFrame: number; fps: number;
   totalFrames: number; sceneIndex: number; totalScenes: number;
   imageUrl?: string;
+  motifEmoji?: string;
 }) {
   const accent = ACCENT[scene.type];
   const label  = LABEL[scene.type];
@@ -532,56 +564,60 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   const currentLineWords = (lines[currentLine] ?? "").split(" ");
   const litWord = Math.min(currentLineWords.length - 1, Math.floor(lineProgress * currentLineWords.length));
 
+  // Kinetic punch line: flash the scene's key phrase mid-scene for ~2.5s
+  const punchStart = Math.round(totalFrames * 0.5);
+  const punchDur   = 75;
+  const punchT     = interpolate(localFrame, [punchStart, punchStart + 12, punchStart + punchDur - 14, punchStart + punchDur], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const punchScale = interpolate(localFrame, [punchStart, punchStart + 14], [0.82, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const showPunch  = !!scene.punch_line && punchT > 0.001;
+
   return (
     <AbsoluteFill style={{
-      background: "#e8eaf0",
+      background: `radial-gradient(130% 110% at 50% -10%, ${accent}1f, transparent 55%), radial-gradient(100% 80% at 85% 110%, ${accent}12, transparent 50%), ${BG_BASE}`,
       fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
       display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      padding: "24px 32px 12px",
+      opacity: fadeIn * fadeOut,
     }}>
-      {/* White slide card */}
+      {/* Full-bleed content with Ken Burns drift */}
       <div style={{
-        width: "100%", flex: 1,
-        background: "#ffffff",
-        borderRadius: 16,
-        boxShadow: "0 8px 48px rgba(0,0,0,0.18)",
-        border: `2.5px solid ${accent}`,
-        display: "flex", flexDirection: "column",
-        overflow: "hidden",
+        flex: 1, display: "flex", flexDirection: "column",
         transform: `translateY(${slideIn}px) scale(${kenBurns})`,
-        opacity: fadeIn * fadeOut,
+        overflow: "hidden",
       }}>
-        {/* Accent bar */}
-        <div style={{ height: 6, background: `linear-gradient(90deg, ${accent}, ${accent}88)`, flexShrink: 0 }} />
-
         {/* Header */}
         <div style={{
-          padding: "16px 30px 14px",
-          borderBottom: `1.5px solid ${accent}22`,
+          padding: "30px 56px 20px",
           flexShrink: 0,
           transform: `translateY(${hlY}px)`,
           opacity: hlOp,
-          display: "flex", alignItems: "center", gap: 18,
+          display: "flex", alignItems: "center", gap: 22,
         }}>
-          <div style={{ fontSize: 40, lineHeight: 1 }}>{scene.emoji}</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: accent, letterSpacing: "0.15em", marginBottom: 5, textTransform: "uppercase" as const }}>
+          <div style={{ fontSize: 46, lineHeight: 1 }}>{scene.emoji}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: accent, letterSpacing: "0.18em", marginBottom: 6, textTransform: "uppercase" as const }}>
               {label} · {sceneIndex + 1} / {totalScenes}
             </div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: "#111827", lineHeight: 1.25 }}>
+            <div style={{ fontSize: 34, fontWeight: 800, color: TEXT_HI, lineHeight: 1.2 }}>
               {scene.headline}
             </div>
           </div>
+          {/* Story motif badge — same on every scene for continuity */}
+          {motifEmoji && (
+            <div style={{
+              fontSize: 30, lineHeight: 1, opacity: 0.85,
+              background: `${accent}14`, border: `1.5px solid ${accent}33`,
+              borderRadius: 14, padding: "10px 14px",
+            }}>{motifEmoji}</div>
+          )}
         </div>
 
         {/* Body — visual content */}
         <div style={{
-          flex: 1, padding: "20px 30px 16px",
+          flex: 1, padding: "10px 56px 8px",
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "#fafbff", overflow: "hidden",
+          overflow: "hidden", minHeight: 0,
         }}>
-          <div style={{ width: "100%", maxWidth: 1060, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 1080, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
           </div>
         </div>
@@ -589,35 +625,48 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
         {/* Footer: key terms */}
         {(scene.key_terms ?? []).length > 0 && (
           <div style={{
-            padding: "6px 18px 8px",
-            borderTop: `1px solid ${accent}18`,
-            display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center",
+            padding: "4px 56px 6px",
+            display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
             flexShrink: 0,
           }}>
             {(scene.key_terms ?? []).slice(0, 7).map(t => (
               <span key={t} style={{
-                background: `${accent}15`, border: `1.5px solid ${accent}44`,
+                background: `${accent}1a`, border: `1.5px solid ${accent}55`,
                 color: accent, borderRadius: 999,
                 padding: "5px 18px", fontSize: 15, fontWeight: 700,
               }}>{t}</span>
             ))}
           </div>
         )}
-
-        {/* Progress bar */}
-        <div style={{ height: 3, background: `${accent}18`, flexShrink: 0 }}>
-          <div style={{
-            height: "100%", width: `${progress * 100}%`,
-            background: `linear-gradient(90deg, ${accent}88, ${accent})`,
-          }} />
-        </div>
       </div>
+
+      {/* Kinetic punch line overlay */}
+      {showPunch && (
+        <AbsoluteFill style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: `rgba(6, 8, 24, ${0.86 * punchT})`,
+          zIndex: 30,
+        }}>
+          <div style={{
+            fontSize: 92, fontWeight: 900, textAlign: "center",
+            padding: "0 80px", lineHeight: 1.15, letterSpacing: "-0.02em",
+            background: `linear-gradient(120deg, ${accent}, #ffffff)`,
+            WebkitBackgroundClip: "text", backgroundClip: "text",
+            color: "transparent",
+            opacity: punchT,
+            transform: `scale(${punchScale})`,
+            textShadow: "none",
+          }}>
+            {scene.punch_line}
+          </div>
+        </AbsoluteFill>
+      )}
 
       {/* Subtitles */}
       <div style={{
-        marginTop: 10,
+        padding: "0 40px 14px",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-        minHeight: 52,
+        minHeight: 68, flexShrink: 0, zIndex: 40,
       }}>
         {visibleLines.map((line, li) => {
           const isCurrent = li === visibleLines.length - 1;
@@ -641,6 +690,14 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           );
         })}
       </div>
+
+      {/* Scene progress — thin bar at the very bottom edge */}
+      <div style={{ height: 4, background: `${accent}1a`, flexShrink: 0 }}>
+        <div style={{
+          height: "100%", width: `${progress * 100}%`,
+          background: `linear-gradient(90deg, ${accent}88, ${accent})`,
+        }} />
+      </div>
     </AbsoluteFill>
   );
 }
@@ -658,7 +715,7 @@ export default function PaperComposition({
   const { fps } = useVideoConfig();
   let offset = 0;
   return (
-    <AbsoluteFill style={{ background: "#e8eaf0" }}>
+    <AbsoluteFill style={{ background: BG_BASE }}>
       {script.scenes.map((scene, index) => {
         const startFrame = offset;
         const durationFrames = Math.round(scene.duration_seconds * fps);
@@ -673,6 +730,7 @@ export default function PaperComposition({
               sceneIndex={index}
               totalScenes={script.scenes.length}
               imageUrl={sceneImages[scene.id]}
+              motifEmoji={script.motif_emoji}
             />
           </Sequence>
         );
