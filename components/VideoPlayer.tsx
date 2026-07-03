@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { Player, PlayerRef } from "@remotion/player";
 import { PaperScript, Scene, SceneType } from "@/types/script";
 import PaperComposition from "./PaperComposition";
+import { buildSceneShots, preloadShots, getPollinationsUrl, ResolvedShot } from "./shots";
 
 const FPS = 30;
 
@@ -458,10 +459,6 @@ function SceneSlide({ scene, imageUrl }: { scene: Scene; imageUrl?: string }) {
   );
 }
 
-function getPollinationsUrl(prompt: string, seed: number): string {
-  const styled = `${prompt}, flat vector illustration, kurzgesagt style, minimalist shapes, vibrant colors, dark navy background, cinematic lighting, no text, no letters, no words`;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(styled)}?width=1280&height=720&nologo=true&seed=${seed}`;
-}
 
 export default function VideoPlayer({ script }: { script: PaperScript }) {
   const playerRef      = useRef<PlayerRef>(null);
@@ -477,6 +474,7 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
   const [audioLoading,  setAudioLoading]  = useState(true);
   const [ttsError,      setTtsError]      = useState<string | null>(null);
   const [sceneImages,   setSceneImages]   = useState<Record<number, string>>({});
+  const [sceneShots,    setSceneShots]    = useState<Record<number, ResolvedShot[]>>({});
 
   const totalFrames  = getTotalFrames(script);
   const sceneOffsets = useMemo(() => getSceneOffsets(script), [script]);
@@ -507,17 +505,19 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
     });
   };
 
-  // Pre-fetch a Pollinations illustration for EVERY scene — it becomes the
-  // animated backdrop. Stable seed keeps the style consistent per video.
+  // Resolve every scene's storyboard into illustration URLs — the shots ARE
+  // the film. A stable seed per shot keeps the art style consistent.
   useEffect(() => {
+    const shots = buildSceneShots(script);
+    setSceneShots(shots);
+    preloadShots(shots);
+    // Legacy single-image map (fallback path in the composition)
     const updates: Record<number, string> = {};
     script.scenes.forEach(s => {
       const prompt = s.image_prompt ?? buildImagePrompt(s);
       updates[s.id] = getPollinationsUrl(prompt, 1000 + s.id * 17);
     });
     setSceneImages(updates);
-    // Warm the browser cache so images are ready when their scene starts
-    Object.values(updates).forEach(url => { const img = new Image(); img.src = url; });
   }, [script]);
 
   // Web Speech API ready check
@@ -661,7 +661,7 @@ export default function VideoPlayer({ script }: { script: PaperScript }) {
             <Player
               ref={playerRef}
               component={PaperComposition}
-              inputProps={{ script, sceneImages }}
+              inputProps={{ script, sceneImages, sceneShots }}
               durationInFrames={totalFrames}
               compositionWidth={1280}
               compositionHeight={720}

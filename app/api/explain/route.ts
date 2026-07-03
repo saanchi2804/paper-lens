@@ -70,10 +70,22 @@ PUNCH LINE: every scene must include "punch_line" — its single most striking p
 
 MOTIF: at the top level include "motif_emoji" — ONE emoji representing the protagonist's world (e.g. 🏪 for a store manager). It appears as a badge on every scene for continuity.
 
-ILLUSTRATION: EVERY scene (regardless of visual_type) must include "image_prompt" — 15-25 words describing an illustrated SCENE from the story: characters, creatures, environments, objects in action. Think of it as the animation frame behind the narration, NOT a diagram. Show the protagonist's world, the phenomenon itself, the stakes. For a dinosaur paper: dinosaurs in their habitat. For a medical paper: the patient, the cells, the hospital. Never describe charts, boxes, arrows, or text in image_prompt. Keep subject matter consistent across all 10 scenes so it feels like one illustrated film.
+PROTAGONIST DESCRIPTION: at the top level include "protagonist_description" — a 15-25 word PHYSICAL description of the protagonist for the illustrator (age, hair, clothing, one distinctive accessory, e.g. "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, always holding a clipboard"). This exact description is pasted into every illustration prompt so the character looks identical in every frame.
 
-━━━ VISUAL SPECIFICATION ━━━
-For each scene choose the visual type that BEST ILLUSTRATES the concept. The visual must explain and illuminate — not echo the words. Ask: what would a professor draw on a whiteboard to make this click?
+━━━ SHOTS (the film itself — this is the most important part) ━━━
+EVERY scene must include "shots": an array of 3-5 full-screen illustrated frames, like a TED-Ed animation storyboard. The video IS these illustrations — the viewer watches them while the narration plays.
+
+Each shot:
+  "image_prompt": 15-25 words describing ONE moment: characters in action, environments, objects, emotions. Show, don't diagram. When the protagonist appears, include the protagonist_description VERBATIM. Vary the camera: wide establishing shot → close-up on a face → over-the-shoulder detail. NEVER describe charts, boxes, arrows, or text.
+  "caption": 0-6 word overlay text (a name, a number, a stinging phrase) — or omit for pure visual moments. Most shots should NOT have a caption.
+  "start": fraction of the scene (0 to 0.85) when this shot appears, ascending. First shot always 0. Space them roughly evenly.
+
+Storyboard like a director: shot 1 sets the location, shot 2 shows the character acting, shot 3 shows the consequence or a revealing detail. The shots must follow the narration's arc — what is being SAID at 40% of the scene is what shot at start:0.4 must SHOW.
+
+ILLUSTRATION (legacy field): EVERY scene must also include "image_prompt" — copy the first shot's image_prompt here.
+
+━━━ DATA INSERT (secondary, appears OVER the shots mid-scene) ━━━
+When a scene contains real numbers, a mechanism, or a comparison, ALSO give it a visual_type — it renders as a card that slides in over the illustration mid-scene, like a TED-Ed cutaway, then leaves. Scenes that are pure story (intro, hook) should use "visual_type": "image" (no insert). Use charts/diagrams ONLY when there is genuine data or structure to show — at most 4-5 scenes out of 10.
 
 "visual_type": "diagram"
   Use for: relationships, mechanisms, cause-effect, concept maps
@@ -115,6 +127,7 @@ For each scene choose the visual type that BEST ILLUSTRATES the concept. The vis
   "title": "...",
   "summary": "...",
   "motif_emoji": "🏪",
+  "protagonist_description": "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, holding a clipboard",
   "scenes": [
     {
       "id": 1,
@@ -124,8 +137,13 @@ For each scene choose the visual type that BEST ILLUSTRATES the concept. The vis
       "key_terms": ["term1", "term2"],
       "emoji": "👩‍🏫",
       "punch_line": "847% ROI",
-      "visual_type": "diagram",
-      "visual_notes": ["Write: ...", "Write: ...", "Arrow: from ... to ...", "Circle: ..."]
+      "visual_type": "image",
+      "image_prompt": "...",
+      "shots": [
+        {"image_prompt": "wide shot of a small grocery store at dawn, warm light spilling onto empty aisles", "start": 0},
+        {"image_prompt": "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, holding a clipboard, staring anxiously at a wall of delivery boxes", "caption": "Meet Maya", "start": 0.3},
+        {"image_prompt": "close-up of a spreadsheet reflected in round glasses, red numbers glowing", "start": 0.6}
+      ]
     },
     {
       "id": 2,

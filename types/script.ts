@@ -61,9 +61,24 @@ export interface Scene {
   image_prompt?: string;
   image_labels?: string[];
 
+  // TED-Ed style shot sequence: full-screen illustrations that crossfade as
+  // the narration progresses. Each shot's `start` is a fraction (0–0.85) of
+  // the scene at which it takes over.
+  shots?: Shot[];
+
   // kinetic text: the scene's single most striking phrase, flashed big
   // mid-scene (e.g. "847% ROI", "8 reports max")
   punch_line?: string;
+}
+
+export interface Shot {
+  // 15-25 word illustration prompt; includes the protagonist description
+  // verbatim when the protagonist appears, for visual continuity
+  image_prompt: string;
+  // 0-6 word overlay caption, empty/omitted for pure visual moments
+  caption?: string;
+  // fraction of the scene (0–0.85) at which this shot takes over
+  start: number;
 }
 
 export interface PaperScript {
@@ -72,5 +87,8 @@ export interface PaperScript {
   // single emoji representing the story's protagonist/setting, shown as a
   // persistent badge for visual continuity across scenes
   motif_emoji?: string;
+  // 15-25 word physical description of the recurring protagonist, repeated
+  // verbatim inside shot prompts so the character looks the same everywhere
+  protagonist_description?: string;
   scenes: Scene[];
 }

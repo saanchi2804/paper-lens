@@ -1,6 +1,7 @@
 "use client";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig, Sequence, Img } from "remotion";
 import { PaperScript, Scene, SceneType } from "@/types/script";
+import { ResolvedShot } from "./shots";
 
 // Bright 400-series accents — designed for the dark full-bleed background
 const ACCENT: Record<SceneType, string> = {
@@ -35,11 +36,19 @@ const LABEL: Record<SceneType, string> = {
 
 // ─── ENTRANCE ANIMATION HELPERS ──────────────────────────────────────────────
 // Frame-based staggered reveals: element `index` fades/scales in starting at
-// REVEAL_START + index * REVEAL_STEP frames into the scene, so visuals build
-// up progressively while the narration introduces them.
+// REVEAL_START + index * step frames into the scene. The step is derived from
+// the scene's duration so visuals build across the WHOLE narration — a 90s
+// scene reveals its last element around the 60s mark, not the 10s mark.
 
 const REVEAL_START = 18;  // ~0.6s in
-const REVEAL_STEP  = 40;  // ~1.3s between elements
+
+// Frames between consecutive reveals for a scene `totalFrames` long with
+// `itemCount` elements. Spread across ~65% of the scene, clamped so short
+// scenes don't crawl and long scenes don't freeze.
+function stagger(totalFrames: number, itemCount: number) {
+  const usable = Math.max(0, totalFrames * 0.65 - REVEAL_START);
+  return Math.max(40, Math.min(240, usable / Math.max(itemCount, 1)));
+}
 
 function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
 
@@ -55,8 +64,8 @@ function bob(localFrame: number, index: number, amplitude = 4) {
   return Math.sin((localFrame + index * 41) / 23) * amplitude;
 }
 
-function popIn(localFrame: number, index: number, durationFrames = 16) {
-  const start = REVEAL_START + index * REVEAL_STEP;
+function popIn(localFrame: number, index: number, step: number, durationFrames = 16) {
+  const start = REVEAL_START + index * step;
   const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const e = easeOutCubic(t);
@@ -64,20 +73,33 @@ function popIn(localFrame: number, index: number, durationFrames = 16) {
 }
 
 // Progress 0→1 for drawing arrows/connectors, starting after `index` reveals
-function drawIn(localFrame: number, index: number, durationFrames = 24) {
-  const start = REVEAL_START + index * REVEAL_STEP;
+function drawIn(localFrame: number, index: number, step: number, durationFrames = 24) {
+  const start = REVEAL_START + index * step;
   const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return easeOutCubic(t);
 }
 
-function countUp(localFrame: number, index: number, value: number, durationFrames = 45) {
-  const start = REVEAL_START + index * REVEAL_STEP;
+function countUp(localFrame: number, index: number, step: number, value: number, durationFrames = 45) {
+  const start = REVEAL_START + index * step;
   const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const eased = easeOutCubic(t);
   // Preserve decimals when the source value has them
   return Number.isInteger(value) ? Math.round(value * eased) : Math.round(value * eased * 10) / 10;
+}
+
+// Point at parameter t along a cubic bezier — used to animate flow dots
+// travelling down an arrow after it has drawn itself.
+function cubicPoint(
+  p0: { x: number; y: number }, p1: { x: number; y: number },
+  p2: { x: number; y: number }, p3: { x: number; y: number }, t: number,
+) {
+  const u = 1 - t;
+  return {
+    x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
+    y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y,
+  };
 }
 
 // ─── DIAGRAM ─────────────────────────────────────────────────────────────────
@@ -103,7 +125,7 @@ function parseNotes(notes: string[]) {
   return { writes, arrows, circles, labels };
 }
 
-function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent: string; localFrame: number }) {
+function ConceptDiagram({ notes, accent, localFrame, totalFrames }: { notes: string[]; accent: string; localFrame: number; totalFrames: number }) {
   const { writes, arrows, circles, labels } = parseNotes(notes);
   const W = 1000, H = 400;
 
@@ -155,6 +177,9 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
   const BH = 74;
   const bw = (l: string) => Math.min(300, Math.max(160, l.length * 13.5 + 44));
 
+  // One reveal slot per node, plus arrows, ring and labels at the end
+  const step = stagger(totalFrames, nodes.length + 2);
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" style={{ overflow: "visible" }}>
       <defs>
@@ -172,16 +197,35 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
         const x1 = sameCol ? p1.x : p1.x + fromW / 2, y1 = sameCol ? p1.y + BH / 2 : p1.y;
         const x2 = sameCol ? p2.x : p2.x - toW / 2,   y2 = sameCol ? p2.y - BH / 2 : p2.y;
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        const d = sameCol
-          ? `M${x1},${y1} C${x1+44},${my} ${x2+44},${my} ${x2},${y2}`
-          : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+        const c1 = sameCol ? { x: x1 + 44, y: my } : { x: mx, y: y1 };
+        const c2 = sameCol ? { x: x2 + 44, y: my } : { x: mx, y: y2 };
+        const d = `M${x1},${y1} C${c1.x},${c1.y} ${c2.x},${c2.y} ${x2},${y2}`;
         // Arrow draws itself after both endpoint nodes have appeared
         const revealIdx = Math.max(nodes.indexOf(e.from), nodes.indexOf(e.to)) + 0.6;
-        const draw = drawIn(localFrame, revealIdx);
+        const draw = drawIn(localFrame, revealIdx, step);
         if (draw <= 0.01) return null;
-        return <path key={i} d={d} fill="none" stroke={accent} strokeWidth={3.5} opacity={0.65 * Math.min(1, draw * 2)}
-          pathLength={1} strokeDasharray={1} strokeDashoffset={1 - draw}
-          markerEnd={draw > 0.95 ? "url(#dg-arrow)" : undefined} />;
+        // Once drawn, dots flow along the arrow forever — data moving through
+        // the system, like tokens streaming encoder → decoder.
+        const flowing = draw > 0.98;
+        const p0 = { x: x1, y: y1 }, p3 = { x: x2, y: y2 };
+        return (
+          <g key={i}>
+            <path d={d} fill="none" stroke={accent} strokeWidth={3.5} opacity={0.65 * Math.min(1, draw * 2)}
+              pathLength={1} strokeDasharray={1} strokeDashoffset={1 - draw}
+              markerEnd={draw > 0.95 ? "url(#dg-arrow)" : undefined} />
+            {flowing && [0, 1].map(k => {
+              const t = ((localFrame * 0.008 + k * 0.5 + i * 0.23) % 1);
+              const pt = cubicPoint(p0, c1, c2, p3, t);
+              // Fade in/out at the ends so dots don't pop at node borders
+              const endFade = Math.min(1, t * 6, (1 - t) * 6);
+              return (
+                <circle key={k} cx={pt.x} cy={pt.y} r={5.5}
+                  fill={accent} opacity={0.9 * endFade}
+                  style={{ filter: `drop-shadow(0 0 6px ${accent})` }} />
+              );
+            })}
+          </g>
+        );
       })}
       {nodes.map((n, i) => {
         const p = pos.get(n); if (!p) return null;
@@ -191,10 +235,10 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
         const isKey = circleSet.has(n.toLowerCase());
         const isPrimary = writes.includes(n) && writes.indexOf(n) <= 1;
         const fs = Math.min(22, Math.max(15, Math.floor(240 / Math.max(text.length, 8))));
-        const anim = popIn(localFrame, i);
+        const anim = popIn(localFrame, i, step);
         const yBob = bob(localFrame, i);
         // The highlight ring lands after all nodes are in — a beat of emphasis
-        const ringDraw = drawIn(localFrame, nodes.length + 0.8);
+        const ringDraw = drawIn(localFrame, nodes.length + 0.8, step);
         const ringPulse = 1 + Math.sin(localFrame / 14) * 0.02;
         return (
           <g key={i} opacity={anim.opacity}
@@ -221,7 +265,7 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
         );
       })}
       {labels.slice(0, 2).map((l, i) => {
-        const anim = popIn(localFrame, nodes.length + 1.6 + i * 0.5);
+        const anim = popIn(localFrame, nodes.length + 1.6 + i * 0.5, step);
         return (
           <text key={i} x={W/2} y={H - 10 - i * 26} textAnchor="middle" fill={TEXT_LOW} fontSize={18}
             fontFamily="system-ui" fontStyle="italic" opacity={anim.opacity}>
@@ -235,15 +279,17 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
 
 // ─── CHART: LAYERS ────────────────────────────────────────────────────────────
 
-function LayersChart({ title, layers, accent, localFrame }: {
+function LayersChart({ title, layers, accent, localFrame, totalFrames }: {
   title?: string;
   layers: { label: string; sublabel?: string }[];
   accent: string;
   localFrame: number;
+  totalFrames: number;
 }) {
   const count = Math.min(layers.length, 6);
   const displayed = layers.slice(0, count);
-  const titleAnim = popIn(localFrame, 0);
+  const step = stagger(totalFrames, count + 1);
+  const titleAnim = popIn(localFrame, 0, step);
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0, alignItems: "center" }}>
       {title && (
@@ -255,7 +301,7 @@ function LayersChart({ title, layers, accent, localFrame }: {
         const depth = i / Math.max(count - 1, 1);
         const bg = `color-mix(in srgb, ${accent} ${10 + depth * 16}%, ${SURFACE})`;
         const borderColor = `color-mix(in srgb, ${accent} ${35 + depth * 40}%, transparent)`;
-        const anim = popIn(localFrame, i + 0.7);
+        const anim = popIn(localFrame, i + 0.7, step);
         return (
           <div key={i} style={{
             width: `${88 - i * 4}%`,
@@ -282,19 +328,21 @@ function LayersChart({ title, layers, accent, localFrame }: {
 
 // ─── CHART: BAR ───────────────────────────────────────────────────────────────
 
-function BarChart({ bars, accent, localFrame }: {
+function BarChart({ bars, accent, localFrame, totalFrames }: {
   bars: { label: string; value: number; highlight?: boolean; unit?: string }[];
   accent: string;
   localFrame: number;
+  totalFrames: number;
 }) {
   const max = Math.max(...bars.map(b => b.value), 1);
+  const step = stagger(totalFrames, bars.length + 1);
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 26, justifyContent: "center" }}>
       {bars.map((bar, i) => {
         const unit = (bar.unit ?? "").trim();
-        const anim = popIn(localFrame, i);
-        const grow = drawIn(localFrame, i + 0.3, 45);
-        const shown = countUp(localFrame, i + 0.3, bar.value);
+        const anim = popIn(localFrame, i, step);
+        const grow = drawIn(localFrame, i + 0.3, step, 45);
+        const shown = countUp(localFrame, i + 0.3, step, bar.value);
         // LLMs sometimes stuff a phrase into unit — only append short true units
         const valueText = unit.length <= 3 ? `${shown}${unit}` : `${shown}`;
         return (
@@ -323,16 +371,19 @@ function BarChart({ bars, accent, localFrame }: {
 
 // ─── CHART: COMPARISON ────────────────────────────────────────────────────────
 
-function ComparisonChart({ columns, accent, localFrame }: {
+function ComparisonChart({ columns, accent, localFrame, totalFrames }: {
   columns: { heading: string; items: string[] }[];
   accent: string;
   localFrame: number;
+  totalFrames: number;
 }) {
   const cols = columns.slice(0, 2);
+  const maxItems = Math.max(...cols.map(c => c.items.length), 1);
+  const step = stagger(totalFrames, maxItems + 3);
   return (
     <div style={{ width: "100%", display: "flex", gap: 26 }}>
       {cols.map((col, ci) => {
-        const colAnim = popIn(localFrame, ci * 0.8);
+        const colAnim = popIn(localFrame, ci * 0.8, step);
         return (
           <div key={ci} style={{
             flex: 1,
@@ -355,7 +406,7 @@ function ComparisonChart({ columns, accent, localFrame }: {
             </div>
             <div style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
               {col.items.slice(0, 5).map((item, ii) => {
-                const itemAnim = popIn(localFrame, 1.4 + ii * 0.7 + ci * 0.35);
+                const itemAnim = popIn(localFrame, 1.4 + ii * 0.7 + ci * 0.35, step);
                 return (
                   <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 13, opacity: itemAnim.opacity, transform: `translateX(${ci === 1 ? itemAnim.shift : -itemAnim.shift}px)` }}>
                     <span style={{ color: ci === 1 ? accent : TEXT_LOW, fontSize: 21, marginTop: 0, fontWeight: 700 }}>
@@ -375,20 +426,22 @@ function ComparisonChart({ columns, accent, localFrame }: {
 
 // ─── CHART: STAT ──────────────────────────────────────────────────────────────
 
-function StatHighlight({ stat, context, accent, extraBars, localFrame }: {
+function StatHighlight({ stat, context, accent, extraBars, localFrame, totalFrames }: {
   stat: string; context?: string; accent: string;
   extraBars?: { label: string; value: number; highlight?: boolean; unit?: string }[];
   localFrame: number;
+  totalFrames: number;
 }) {
-  const boxAnim = popIn(localFrame, 0);
-  const ctxAnim = popIn(localFrame, 1.4);
+  const step = stagger(totalFrames, 3);
+  const boxAnim = popIn(localFrame, 0, step);
+  const ctxAnim = popIn(localFrame, 1.4, step);
   // Count up the leading number if the stat starts with one (e.g. "847%" or "3.2x")
   const m = (stat ?? "").match(/^([\d,]+(?:\.\d+)?)(.*)$/);
   let displayStat = stat;
   if (m) {
     const target = parseFloat(m[1].replace(/,/g, ""));
     if (!Number.isNaN(target)) {
-      const shown = countUp(localFrame, 0.3, target, 60);
+      const shown = countUp(localFrame, 0.3, step, target, 60);
       displayStat = `${Number.isInteger(target) ? Math.round(shown).toLocaleString() : shown}${m[2]}`;
     }
   }
@@ -411,7 +464,7 @@ function StatHighlight({ stat, context, accent, extraBars, localFrame }: {
       </div>
       {extraBars && extraBars.length > 0 && (
         <div style={{ width: "100%" }}>
-          <BarChart bars={extraBars} accent={accent} localFrame={Math.max(0, localFrame - REVEAL_STEP * 2)} />
+          <BarChart bars={extraBars} accent={accent} localFrame={Math.max(0, localFrame - step * 2)} totalFrames={totalFrames} />
         </div>
       )}
     </div>
@@ -420,13 +473,14 @@ function StatHighlight({ stat, context, accent, extraBars, localFrame }: {
 
 // ─── CHART: TIMELINE ─────────────────────────────────────────────────────────
 
-function TimelineChart({ events, accent, localFrame }: { events: string[]; accent: string; localFrame: number }) {
+function TimelineChart({ events, accent, localFrame, totalFrames }: { events: string[]; accent: string; localFrame: number; totalFrames: number }) {
   const displayed = events.slice(0, 5);
+  const step = stagger(totalFrames, displayed.length + 1);
   return (
     <div style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 0, overflowX: "hidden" }}>
       {displayed.map((evt, i) => {
-        const anim = popIn(localFrame, i);
-        const lineDraw = drawIn(localFrame, i + 0.5, 30);
+        const anim = popIn(localFrame, i, step);
+        const lineDraw = drawIn(localFrame, i + 0.5, step, 30);
         return (
           <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
             {/* Connector line — draws left→right toward the next dot */}
@@ -495,8 +549,8 @@ function ImagePanel({ imageUrl, labels, accent }: {
 
 // ─── VISUAL DISPATCHER ───────────────────────────────────────────────────────
 
-function SceneVisual({ scene, imageUrl, accent, localFrame }: {
-  scene: Scene; imageUrl?: string; accent: string; localFrame: number;
+function SceneVisual({ scene, imageUrl, accent, localFrame, totalFrames }: {
+  scene: Scene; imageUrl?: string; accent: string; localFrame: number; totalFrames: number;
 }) {
   const vt = scene.visual_type ?? "diagram";
 
@@ -507,15 +561,15 @@ function SceneVisual({ scene, imageUrl, accent, localFrame }: {
   if (vt === "chart") {
     switch (scene.chart_type) {
       case "layers":
-        return <LayersChart title={scene.chart_title} layers={scene.layers ?? []} accent={accent} localFrame={localFrame} />;
+        return <LayersChart title={scene.chart_title} layers={scene.layers ?? []} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />;
       case "bar":
-        return <BarChart bars={scene.bars ?? []} accent={accent} localFrame={localFrame} />;
+        return <BarChart bars={scene.bars ?? []} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />;
       case "comparison":
-        return <ComparisonChart columns={scene.columns ?? []} accent={accent} localFrame={localFrame} />;
+        return <ComparisonChart columns={scene.columns ?? []} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />;
       case "stat":
-        return <StatHighlight stat={scene.stat ?? ""} context={scene.stat_context} accent={accent} localFrame={localFrame} />;
+        return <StatHighlight stat={scene.stat ?? ""} context={scene.stat_context} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />;
       case "timeline":
-        return <TimelineChart events={scene.timeline_events ?? []} accent={accent} localFrame={localFrame} />;
+        return <TimelineChart events={scene.timeline_events ?? []} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />;
     }
   }
 
@@ -523,13 +577,14 @@ function SceneVisual({ scene, imageUrl, accent, localFrame }: {
   const notes = scene.visual_notes ?? [];
   const { writes, arrows } = parseNotes(notes);
   if (writes.length > 0 || arrows.length > 0) {
-    return <ConceptDiagram notes={notes} accent={accent} localFrame={localFrame} />;
+    return <ConceptDiagram notes={notes} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />;
   }
 
   // Last resort (e.g. image scene whose image hasn't loaded): big emoji +
   // key phrase so the frame is never empty.
-  const anim = popIn(localFrame, 0);
-  const termAnim = popIn(localFrame, 1.2);
+  const fallbackStep = stagger(totalFrames, 2);
+  const anim = popIn(localFrame, 0, fallbackStep);
+  const termAnim = popIn(localFrame, 1.2, fallbackStep);
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28 }}>
       <div style={{ fontSize: 130, lineHeight: 1, opacity: anim.opacity, transform: `scale(${anim.scale})` }}>
@@ -585,10 +640,11 @@ function toLines(narration: string, wordsPerLine = 10): string[] {
 
 // ─── SCENE VIEW ───────────────────────────────────────────────────────────────
 
-function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScenes, imageUrl, motifEmoji }: {
+function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScenes, imageUrl, shots, motifEmoji }: {
   scene: Scene; localFrame: number; fps: number;
   totalFrames: number; sceneIndex: number; totalScenes: number;
   imageUrl?: string;
+  shots?: ResolvedShot[];
   motifEmoji?: string;
 }) {
   const accent = ACCENT[scene.type];
@@ -619,13 +675,41 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   const punchScale = interpolate(localFrame, [punchStart, punchStart + 14], [0.82, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const showPunch  = !!scene.punch_line && punchT > 0.001;
 
-  // Illustration backdrop: slow cinematic pan-zoom; hero-bright on image
-  // scenes, dimmed under charts/diagrams so foreground stays readable
+  // ── TED-Ed shot sequence ──────────────────────────────────────────────────
+  // The illustrations ARE the film: full-bleed shots crossfade at their beat
+  // fractions, each with its own Ken Burns move. Legacy scenes without a
+  // storyboard fall back to a single shot built from imageUrl.
+  const displayShots: ResolvedShot[] = (shots && shots.length > 0)
+    ? shots
+    : (imageUrl ? [{ url: imageUrl, start: 0 }] : []);
+  const hasShots = displayShots.length > 0;
+
+  // A chart/diagram renders as a cutaway card that slides in over the art
+  // mid-scene, then leaves — data as a moment, not a permanent fixture.
   const isImageScene = (scene.visual_type ?? "diagram") === "image";
-  const isChartScene = scene.visual_type === "chart";
-  const bgPan   = interpolate(localFrame, [0, totalFrames], [-2.5, 2.5], { extrapolateRight: "clamp" });
-  const bgScale = 1.1 + interpolate(localFrame, [0, totalFrames], [0, 0.06], { extrapolateRight: "clamp" });
-  const bgOpacity = isImageScene ? 0.85 : 0.5;
+  const hasInsert = hasShots && !isImageScene && (
+    scene.visual_type === "chart" || (scene.visual_notes ?? []).length > 0
+  );
+  const insertStartF = Math.round(totalFrames * 0.30);
+  const insertEndF   = Math.round(totalFrames * 0.88);
+  const insertIn  = interpolate(localFrame, [insertStartF, insertStartF + 16], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const insertOut = interpolate(localFrame, [insertEndF - 14, insertEndF], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const insertOp  = hasInsert ? Math.min(insertIn, insertOut) : 0;
+
+  // Which shot is on screen right now (for the caption)
+  const SHOT_FADE = 18;
+  const shotStartF = (i: number) => Math.round(displayShots[i].start * totalFrames);
+  let activeShotIdx = 0;
+  for (let i = displayShots.length - 1; i >= 0; i--) {
+    if (localFrame >= shotStartF(i)) { activeShotIdx = i; break; }
+  }
+  const activeCaption = displayShots[activeShotIdx]?.caption;
+  const captionAge = localFrame - shotStartF(activeShotIdx);
+  const captionOp  = interpolate(captionAge, [8, 26], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const captionY   = interpolate(captionAge, [8, 26], [18, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+
+  // Art dims while the data card is up so the numbers stay readable
+  const artDim = 1 - insertOp * 0.55;
 
   return (
     <AbsoluteFill style={{
@@ -634,20 +718,33 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
       display: "flex", flexDirection: "column",
       opacity: fadeIn * fadeOut,
     }}>
-      {/* Illustrated backdrop — plain <img> so a slow load never stalls playback */}
-      {imageUrl && (
+      {/* Shot sequence — plain <img> so a slow load never stalls playback */}
+      {hasShots && (
         <AbsoluteFill style={{ overflow: "hidden", zIndex: 0 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="" style={{
-            width: "100%", height: "100%", objectFit: "cover",
-            opacity: bgOpacity,
-            transform: `scale(${bgScale}) translateX(${bgPan}%)`,
-          }} />
-          {/* Legibility gradients: darken edges and bottom */}
+          {displayShots.map((shot, si) => {
+            const startF = shotStartF(si);
+            const nextF  = si + 1 < displayShots.length ? shotStartF(si + 1) : totalFrames;
+            const inOp  = si === 0 ? 1 : interpolate(localFrame, [startF, startF + SHOT_FADE], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+            const outOp = si + 1 < displayShots.length ? interpolate(localFrame, [nextF, nextF + SHOT_FADE], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 1;
+            const op = Math.min(inOp, outOp);
+            if (op <= 0.001) return null;
+            // Alternate Ken Burns per shot: even shots push in, odd pull out
+            const segT = interpolate(localFrame, [startF, nextF + SHOT_FADE], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+            const scale = si % 2 === 0 ? 1.04 + segT * 0.10 : 1.14 - segT * 0.10;
+            const panX  = ((si % 3) - 1) * 2.2 * segT;
+            return (
+              <AbsoluteFill key={si} style={{ opacity: op * artDim }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={shot.url} alt="" style={{
+                  width: "100%", height: "100%", objectFit: "cover",
+                  transform: `scale(${scale}) translateX(${panX}%)`,
+                }} />
+              </AbsoluteFill>
+            );
+          })}
+          {/* Legibility gradients: darken top strip and bottom for text */}
           <AbsoluteFill style={{
-            background: isImageScene
-              ? `linear-gradient(180deg, ${BG_BASE}cc 0%, transparent 30%, transparent 62%, ${BG_BASE}f2 100%)`
-              : `linear-gradient(180deg, ${BG_BASE}b8 0%, ${BG_BASE}55 40%, ${BG_BASE}a8 100%)`,
+            background: `linear-gradient(180deg, ${BG_BASE}b3 0%, transparent 24%, transparent 60%, ${BG_BASE}ee 100%)`,
           }} />
         </AbsoluteFill>
       )}
@@ -689,62 +786,56 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           )}
         </div>
 
-        {/* Body — visual content */}
+        {/* Body — the art carries the scene; data appears as a cutaway card */}
         <div style={{
           flex: 1, padding: "10px 56px 8px",
           display: "flex", alignItems: "center", justifyContent: "center",
           overflow: "hidden", minHeight: 0,
+          position: "relative",
         }}>
-          <div style={{ width: "100%", maxWidth: 1080, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {isImageScene && imageUrl ? (
-              /* Illustration IS the hero — float its labels over the backdrop */
-              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "flex-end", justifyContent: "flex-start", paddingBottom: 18, gap: 10, flexWrap: "wrap" }}>
-                {(scene.image_labels ?? []).slice(0, 3).map((l, i) => {
-                  const anim = popIn(localFrame, 1 + i);
-                  return (
-                    <span key={i} style={{
-                      background: `${BG_BASE}d8`, color: TEXT_HI,
-                      border: `1.5px solid ${accent}66`,
-                      borderRadius: 12, padding: "10px 22px",
-                      fontSize: 20, fontWeight: 700,
-                      opacity: anim.opacity, transform: `translateY(${anim.shift}px)`,
-                    }}>{l}</span>
-                  );
-                })}
-              </div>
-            ) : isChartScene ? (
-              /* Glass panel keeps chart data readable over the bright backdrop */
-              <div style={{
-                width: "100%",
-                background: `rgba(11, 14, 31, 0.68)`,
-                backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-                border: "1px solid #ffffff16",
-                borderRadius: 24, padding: "36px 44px",
-              }}>
-                <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
-              </div>
-            ) : (
-              <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
-            )}
-          </div>
+          {hasShots ? (
+            <>
+              {hasInsert && insertOp > 0.001 && (
+                <div style={{
+                  width: "100%", maxWidth: 1080,
+                  background: `rgba(11, 14, 31, 0.78)`,
+                  backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                  border: "1px solid #ffffff1e",
+                  borderRadius: 24, padding: "36px 44px",
+                  opacity: insertOp,
+                  transform: `translateY(${(1 - insertIn) * 36}px) scale(${0.96 + insertIn * 0.04})`,
+                }}>
+                  <SceneVisual
+                    scene={scene} imageUrl={imageUrl} accent={accent}
+                    localFrame={Math.max(0, localFrame - insertStartF)}
+                    totalFrames={insertEndF - insertStartF}
+                  />
+                </div>
+              )}
+              {/* Shot caption — a name, a number, a sting */}
+              {activeCaption && insertOp < 0.5 && (
+                <div style={{
+                  position: "absolute", left: 56, bottom: 24,
+                  opacity: captionOp * (1 - insertOp * 2),
+                  transform: `translateY(${captionY}px)`,
+                }}>
+                  <div style={{ width: 54, height: 6, background: accent, borderRadius: 3, marginBottom: 14 }} />
+                  <div style={{
+                    fontSize: 54, fontWeight: 900, color: TEXT_HI,
+                    lineHeight: 1.1, letterSpacing: "-0.02em", maxWidth: 700,
+                    textShadow: `0 4px 30px ${BG_BASE}`,
+                  }}>
+                    {activeCaption}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ width: "100%", maxWidth: 1080, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} totalFrames={totalFrames} />
+            </div>
+          )}
         </div>
-
-        {/* Footer: key terms */}
-        {(scene.key_terms ?? []).length > 0 && (
-          <div style={{
-            padding: "4px 56px 6px",
-            display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
-            flexShrink: 0,
-          }}>
-            {(scene.key_terms ?? []).slice(0, 7).map(t => (
-              <span key={t} style={{
-                background: `${accent}1a`, border: `1.5px solid ${accent}55`,
-                color: accent, borderRadius: 999,
-                padding: "5px 18px", fontSize: 15, fontWeight: 700,
-              }}>{t}</span>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Kinetic punch line overlay */}
@@ -814,9 +905,11 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
 export default function PaperComposition({
   script,
   sceneImages = {},
+  sceneShots = {},
 }: {
   script: PaperScript;
   sceneImages?: Record<number, string>;
+  sceneShots?: Record<number, ResolvedShot[]>;
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -837,6 +930,7 @@ export default function PaperComposition({
               sceneIndex={index}
               totalScenes={script.scenes.length}
               imageUrl={sceneImages[scene.id]}
+              shots={sceneShots[scene.id]}
               motifEmoji={script.motif_emoji}
             />
           </Sequence>
