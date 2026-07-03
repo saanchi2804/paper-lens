@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Scene } from "@/types/script";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // Vercel hobby plan max
+export const maxDuration = 300; // Vercel hobby limit with Fluid Compute; glm-4.6 needs ~2-3 min
 
 function wordsToSeconds(text: string): number {
   const words = text.trim().split(/\s+/).length;
@@ -39,6 +39,14 @@ export async function POST(request: NextRequest) {
 - You speak in SHORT, PUNCHY sentences. No walls of text. Mix rhythm.
 - You are genuinely EXCITED about the research. Your enthusiasm is contagious.
 
+━━━ STORYTELLING RULES (this is what separates a lecture students love from one they endure) ━━━
+1. ONE CONTINUOUS STORY, not 10 separate summaries. Before writing, invent a PROTAGONIST — a named person facing the exact problem this paper solves (e.g. "Maya, a new store manager in Ohio"). Open scene 1 inside her life. Return to her in EVERY scene: her confusion becomes the hook, her situation becomes the worked example, her outcome becomes the finding.
+2. OPEN LOOPS. Every scene except the last ends mid-tension: a question raised but not answered, a promise of a twist, a number teased but not yet explained. The viewer should feel unable to stop watching.
+3. CALLBACKS. At least 3 scenes must explicitly reference an earlier moment: "Remember that number from the beginning? Here's where it comes from."
+4. STAKES. Early on, make the cost of the unsolved problem VISCERAL — money lost, careers stalled, patients harmed. The research must feel like a rescue, not a paper.
+5. THE TURN. Somewhere in the middle (concept or deep_dive), there must be a genuine "wait, WHAT?" moment — the counterintuitive insight of the paper, delivered like a plot twist, not a bullet point.
+6. PAYOFF. The summary resolves the protagonist's story AND answers the opening question, so the lecture lands like the last page of a good novel.
+
 Return ONLY valid JSON, no markdown fences, no text outside the JSON.
 
 SCENE SEQUENCE — exactly 10 scenes in this order:
@@ -54,9 +62,9 @@ SCENE INSTRUCTIONS:
 7. worked_example — Using the specific example from scene 4, walk through the method with real numbers. Show intermediate calculations. Make it concrete enough that a student could reproduce it on paper.
 8. finding — Report the key results with EXACT statistics from the paper (e.g. "84.3% vs 71.2%, p < .001"). Then explain what those numbers actually mean for a practitioner — not just that it's better, but why that margin matters.
 9. implication — What changes in the real world because of this paper? Who should act differently — a clinician, an engineer, a policymaker? What open questions remain? What would the next experiment be?
-10. summary — Crystallize exactly 3 things the student must walk away knowing. Connect each back to the opening puzzle from scene 1. End with why this matters beyond the paper.
+10. summary — Crystallize exactly 3 things the student must walk away knowing. Connect each back to the opening puzzle from scene 1. Resolve the protagonist's story. End with why this matters beyond the paper — NEVER tease a "next lecture" or content that doesn't exist.
 
-NARRATION LENGTH: 220-260 words per scene. This is non-negotiable — short narrations make the video feel rushed and shallow. Count your words. Each scene should feel like a complete mini-lecture, not a bullet point read aloud.
+NARRATION LENGTH: 190-230 words per scene (~13-15 min total at speaking pace). Count your words. Each scene should feel like a complete chapter of the story, not a bullet point read aloud.
 
 ━━━ VISUAL SPECIFICATION ━━━
 For each scene choose the visual type that BEST ILLUSTRATES the concept. The visual must explain and illuminate — not echo the words. Ask: what would a professor draw on a whiteboard to make this click?
@@ -150,9 +158,12 @@ Here is the research paper:
 
 ${pdfText}`;
 
+    // glm-4.6 (full model) follows length + storytelling instructions far
+    // better than glm-4.5-air; the expansion passes below remain as a safety
+    // net and only fire for scenes that still come back short.
     const response = await client.messages.create({
-      model: "glm-4.5-air",
-      max_tokens: 12000,
+      model: "glm-4.6",
+      max_tokens: 16000,
       messages: [{ role: "user", content: prompt }],
     });
 
@@ -163,6 +174,9 @@ ${pdfText}`;
       let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) cleaned = jsonMatch[0];
+      // Repair invalid escape sequences LLMs emit (e.g. "\$1,200" — \$ is not
+      // valid JSON). Drop the backslash before any non-escapable character.
+      cleaned = cleaned.replace(/\\(?!["\\/bfnrtu])/g, "");
       script = JSON.parse(cleaned);
     } catch {
       console.error("[explain] raw response:", raw.slice(0, 500));
@@ -170,7 +184,16 @@ ${pdfText}`;
     }
 
     script.scenes = script.scenes
-      .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim());
+      .filter((scene: Scene) => scene && typeof scene.narration === "string" && scene.narration.trim())
+      // The LLM sometimes puts a chart_type ("layers", "timeline", …) directly
+      // into visual_type — normalize so the renderer recognizes it.
+      .map((scene: Scene) => {
+        const vt = scene.visual_type as string | undefined;
+        if (vt && ["layers", "bar", "comparison", "stat", "timeline"].includes(vt)) {
+          return { ...scene, visual_type: "chart" as const, chart_type: (scene.chart_type ?? vt) as Scene["chart_type"] };
+        }
+        return scene;
+      });
 
     // ── Passes 2 & 3: Expand short narrations ────────────────────────────────
     // GLM Air writes ~100 words regardless of instructions. We run two focused
@@ -203,7 +226,7 @@ ${sceneList}`;
 
       try {
         const res = await client.messages.create({
-          model: "glm-4.5-air",
+          model: "glm-4.6",
           max_tokens: 8000,
           messages: [{ role: "user", content: expandPrompt }],
         });

@@ -50,7 +50,7 @@ function parseNotes(notes: string[]) {
 
 function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) {
   const { writes, arrows, circles, labels } = parseNotes(notes);
-  const W = 860, H = 260;
+  const W = 1000, H = 400;
 
   const nodeSet = new Set<string>();
   writes.forEach(w => nodeSet.add(w));
@@ -81,19 +81,24 @@ function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) 
   const byLayer: string[][] = Array.from({ length: maxL + 1 }, () => []);
   nodes.forEach(n => byLayer[layerMap.get(n) ?? 0].push(n));
 
-  const PAD_X = 90, PAD_Y = 44;
+  // Cap the gap between layers so a 2-node diagram doesn't fling boxes to
+  // opposite edges of the slide — cluster the diagram and center it.
+  const PAD_X = 40, PAD_Y = 60;
+  const layerGap = maxL === 0 ? 0 : Math.min(420, (W - 2 * PAD_X) / maxL);
+  const usedW = maxL * layerGap;
+  const startX = (W - usedW) / 2;
   const pos = new Map<string, { x: number; y: number }>();
   byLayer.forEach((ln, li) => {
-    const x = maxL === 0 ? W / 2 : PAD_X + (li / maxL) * (W - 2 * PAD_X);
+    const x = maxL === 0 ? W / 2 : startX + li * layerGap;
     ln.forEach((n, ni) => {
-      const spacing = Math.min(96, (H - 2 * PAD_Y) / Math.max(ln.length, 1));
+      const spacing = Math.min(130, (H - 2 * PAD_Y) / Math.max(ln.length, 1));
       const y = H / 2 + (ni - (ln.length - 1) / 2) * spacing;
       pos.set(n, { x, y });
     });
   });
 
-  const BH = 50;
-  const bw = (l: string) => Math.min(180, Math.max(100, l.length * 9.5 + 28));
+  const BH = 74;
+  const bw = (l: string) => Math.min(300, Math.max(160, l.length * 13.5 + 44));
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" style={{ overflow: "visible" }}>
@@ -114,20 +119,20 @@ function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) 
         const d = sameCol
           ? `M${x1},${y1} C${x1+44},${my} ${x2+44},${my} ${x2},${y2}`
           : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
-        return <path key={i} d={d} fill="none" stroke={accent} strokeWidth={2.2} opacity={0.65} markerEnd="url(#dg-arrow)" />;
+        return <path key={i} d={d} fill="none" stroke={accent} strokeWidth={3.5} opacity={0.65} markerEnd="url(#dg-arrow)" />;
       })}
       {nodes.map((n, i) => {
         const p = pos.get(n); if (!p) return null;
         const w = bw(n);
         const isKey = circleSet.has(n.toLowerCase());
         const isPrimary = writes.includes(n) && writes.indexOf(n) <= 1;
-        const fs = Math.min(15, Math.max(10, Math.floor(150 / Math.max(n.length, 6))));
+        const fs = Math.min(23, Math.max(15, Math.floor(250 / Math.max(n.length, 8))));
         return (
           <g key={i}>
-            {isKey && <ellipse cx={p.x} cy={p.y} rx={w/2+14} ry={BH/2+14} fill={`${accent}12`} stroke={accent} strokeWidth={2.5} strokeDasharray="8,4" opacity={0.9} />}
-            <rect x={p.x-w/2} y={p.y-BH/2} width={w} height={BH} rx={10}
+            {isKey && <ellipse cx={p.x} cy={p.y} rx={w/2+20} ry={BH/2+20} fill={`${accent}12`} stroke={accent} strokeWidth={3.5} strokeDasharray="10,5" opacity={0.9} />}
+            <rect x={p.x-w/2} y={p.y-BH/2} width={w} height={BH} rx={14}
               fill={isPrimary ? `${accent}1a` : "#ffffff"}
-              stroke={accent} strokeWidth={isPrimary ? 2.2 : 1.6} filter="url(#node-shadow)" />
+              stroke={accent} strokeWidth={isPrimary ? 3 : 2.2} filter="url(#node-shadow)" />
             <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle"
               fill="#111827" fontSize={fs}
               fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
@@ -138,7 +143,7 @@ function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) 
         );
       })}
       {labels.slice(0, 2).map((l, i) => (
-        <text key={i} x={W/2} y={H - 8 - i * 16} textAnchor="middle" fill="#6b7280" fontSize={11.5}
+        <text key={i} x={W/2} y={H - 10 - i * 26} textAnchor="middle" fill="#6b7280" fontSize={18}
           fontFamily="system-ui" fontStyle="italic">
           {l.length > 65 ? l.slice(0, 63) + "…" : l}
         </text>
@@ -159,7 +164,7 @@ function LayersChart({ title, layers, accent }: {
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0, alignItems: "center" }}>
       {title && (
-        <div style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: accent, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 22 }}>
           {title}
         </div>
       )}
@@ -169,18 +174,18 @@ function LayersChart({ title, layers, accent }: {
         const borderColor = `color-mix(in srgb, ${accent} ${30 + depth * 40}%, transparent)`;
         return (
           <div key={i} style={{
-            width: `${96 - i * 3}%`,
+            width: `${88 - i * 4}%`,
             background: bg,
-            border: `1.8px solid ${borderColor}`,
-            borderRadius: i === 0 ? "10px 10px 4px 4px" : i === count - 1 ? "4px 4px 10px 10px" : "4px",
-            padding: "10px 20px",
+            border: `2.5px solid ${borderColor}`,
+            borderRadius: i === 0 ? "14px 14px 6px 6px" : i === count - 1 ? "6px 6px 14px 14px" : "6px",
+            padding: "22px 34px",
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            marginBottom: i < count - 1 ? -1 : 0,
+            marginBottom: i < count - 1 ? -2 : 0,
             zIndex: count - i,
           }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{layer.label}</span>
+            <span style={{ fontSize: 24, fontWeight: 700, color: "#111827" }}>{layer.label}</span>
             {layer.sublabel && (
-              <span style={{ fontSize: 11, color: "#6b7280", fontStyle: "italic" }}>{layer.sublabel}</span>
+              <span style={{ fontSize: 17, color: "#6b7280", fontStyle: "italic" }}>{layer.sublabel}</span>
             )}
           </div>
         );
@@ -197,29 +202,30 @@ function BarChart({ bars, accent }: {
 }) {
   const max = Math.max(...bars.map(b => b.value), 1);
   return (
-    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
-      {bars.map((bar, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 130, fontSize: 12, fontWeight: bar.highlight ? 700 : 500, color: bar.highlight ? "#111827" : "#4b5563", textAlign: "right", flexShrink: 0 }}>
-            {bar.label}
-          </div>
-          <div style={{ flex: 1, background: "#f1f5f9", borderRadius: 6, height: 28, overflow: "hidden" }}>
-            <div style={{
-              width: `${(bar.value / max) * 100}%`,
-              height: "100%",
-              background: bar.highlight ? accent : `${accent}66`,
-              borderRadius: 6,
-              display: "flex", alignItems: "center", justifyContent: "flex-end",
-              paddingRight: 8,
-              transition: "width 0.3s ease",
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
-                {bar.value}{bar.unit ?? ""}
-              </span>
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 26, justifyContent: "center" }}>
+      {bars.map((bar, i) => {
+        const unit = (bar.unit ?? "").trim();
+        // LLMs sometimes stuff a phrase into unit — only append short true units
+        const valueText = unit.length <= 3 ? `${bar.value}${unit}` : `${bar.value}`;
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <div style={{ width: 250, fontSize: 21, fontWeight: bar.highlight ? 700 : 500, color: bar.highlight ? "#111827" : "#4b5563", textAlign: "right", flexShrink: 0, lineHeight: 1.25 }}>
+              {bar.label}
+            </div>
+            <div style={{ flex: 1, background: "#eef1f6", borderRadius: 10, height: 54, overflow: "hidden" }}>
+              <div style={{
+                width: `${Math.max(3, (bar.value / max) * 100)}%`,
+                height: "100%",
+                background: bar.highlight ? accent : `${accent}55`,
+                borderRadius: 10,
+              }} />
+            </div>
+            <div style={{ width: 140, fontSize: 27, fontWeight: 800, color: bar.highlight ? accent : "#374151", flexShrink: 0 }}>
+              {valueText}
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -232,30 +238,31 @@ function ComparisonChart({ columns, accent }: {
 }) {
   const cols = columns.slice(0, 2);
   return (
-    <div style={{ width: "100%", display: "flex", gap: 12 }}>
+    <div style={{ width: "100%", display: "flex", gap: 26 }}>
       {cols.map((col, ci) => (
         <div key={ci} style={{
           flex: 1,
-          border: `2px solid ${ci === 1 ? accent : "#e5e7eb"}`,
-          borderRadius: 10,
+          border: `3px solid ${ci === 1 ? accent : "#e5e7eb"}`,
+          borderRadius: 16,
           overflow: "hidden",
+          background: "#ffffff",
         }}>
           <div style={{
             background: ci === 1 ? accent : "#f9fafb",
             color: ci === 1 ? "#fff" : "#374151",
-            fontSize: 12, fontWeight: 700, textAlign: "center",
-            padding: "7px 12px",
+            fontSize: 21, fontWeight: 700, textAlign: "center",
+            padding: "16px 20px",
             borderBottom: `1px solid ${ci === 1 ? `${accent}44` : "#e5e7eb"}`,
           }}>
             {col.heading}
           </div>
-          <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
+          <div style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
             {col.items.slice(0, 5).map((item, ii) => (
-              <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
-                <span style={{ color: ci === 1 ? accent : "#9ca3af", fontSize: 13, marginTop: 1 }}>
-                  {ci === 1 ? "✓" : "·"}
+              <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
+                <span style={{ color: ci === 1 ? accent : "#9ca3af", fontSize: 21, marginTop: 0, fontWeight: 700 }}>
+                  {ci === 1 ? "✓" : "✗"}
                 </span>
-                <span style={{ fontSize: 12, color: "#374151", lineHeight: 1.4 }}>{item}</span>
+                <span style={{ fontSize: 19, color: "#374151", lineHeight: 1.45 }}>{item}</span>
               </div>
             ))}
           </div>
@@ -277,13 +284,13 @@ function StatHighlight({ stat, context, accent, extraBars }: {
         textAlign: "center",
         background: `linear-gradient(135deg, ${accent}18, ${accent}06)`,
         border: `2.5px solid ${accent}`, borderRadius: 16,
-        padding: "20px 40px",
+        padding: "36px 70px",
       }}>
-        <div style={{ fontSize: 64, fontWeight: 900, color: accent, lineHeight: 1, letterSpacing: "-0.03em" }}>
+        <div style={{ fontSize: 110, fontWeight: 900, color: accent, lineHeight: 1, letterSpacing: "-0.03em" }}>
           {stat.length > 18 ? stat.slice(0, 17) + "…" : stat}
         </div>
         {context && (
-          <div style={{ fontSize: 14, color: "#6b7280", marginTop: 8, fontWeight: 600 }}>{context}</div>
+          <div style={{ fontSize: 24, color: "#6b7280", marginTop: 16, fontWeight: 600 }}>{context}</div>
         )}
       </div>
       {extraBars && extraBars.length > 0 && (
@@ -306,28 +313,28 @@ function TimelineChart({ events, accent }: { events: string[]; accent: string })
           {/* Connector line */}
           {i < displayed.length - 1 && (
             <div style={{
-              position: "absolute", top: 16, left: "50%", width: "100%",
-              height: 2, background: `${accent}44`,
+              position: "absolute", top: 29, left: "50%", width: "100%",
+              height: 3.5, background: `${accent}44`,
               zIndex: 0,
             }} />
           )}
           {/* Dot */}
           <div style={{
-            width: 32, height: 32, borderRadius: "50%",
+            width: 58, height: 58, borderRadius: "50%",
             background: accent, color: "#fff",
-            fontSize: 13, fontWeight: 800,
+            fontSize: 24, fontWeight: 800,
             display: "flex", alignItems: "center", justifyContent: "center",
             zIndex: 1, flexShrink: 0,
-            boxShadow: `0 0 0 4px ${accent}22`,
+            boxShadow: `0 0 0 8px ${accent}22`,
           }}>
             {i + 1}
           </div>
           {/* Label */}
           <div style={{
-            marginTop: 8, fontSize: 11, fontWeight: 600, color: "#374151",
-            textAlign: "center", padding: "0 6px", lineHeight: 1.3,
+            marginTop: 18, fontSize: 18, fontWeight: 600, color: "#374151",
+            textAlign: "center", padding: "0 12px", lineHeight: 1.4,
           }}>
-            {evt.length > 40 ? evt.slice(0, 38) + "…" : evt}
+            {evt.length > 70 ? evt.slice(0, 68) + "…" : evt}
           </div>
         </div>
       ))}
@@ -455,27 +462,33 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
 
         {/* Header */}
         <div style={{
-          padding: "10px 22px 9px",
+          padding: "16px 30px 14px",
           borderBottom: `1.5px solid ${accent}22`,
           flexShrink: 0,
           transform: `translateY(${hlY}px)`,
           opacity: hlOp,
+          display: "flex", alignItems: "center", gap: 18,
         }}>
-          <div style={{ fontSize: 9, fontWeight: 800, color: accent, letterSpacing: "0.15em", marginBottom: 4, textTransform: "uppercase" as const }}>
-            {label} · {sceneIndex + 1} / {totalScenes}
-          </div>
-          <div style={{ fontSize: 19, fontWeight: 800, color: "#111827", lineHeight: 1.3 }}>
-            {scene.headline}
+          <div style={{ fontSize: 40, lineHeight: 1 }}>{scene.emoji}</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: accent, letterSpacing: "0.15em", marginBottom: 5, textTransform: "uppercase" as const }}>
+              {label} · {sceneIndex + 1} / {totalScenes}
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: "#111827", lineHeight: 1.25 }}>
+              {scene.headline}
+            </div>
           </div>
         </div>
 
         {/* Body — visual content */}
         <div style={{
-          flex: 1, padding: "16px 20px 12px",
+          flex: 1, padding: "20px 30px 16px",
           display: "flex", alignItems: "center", justifyContent: "center",
           background: "#fafbff", overflow: "hidden",
         }}>
-          <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} />
+          <div style={{ width: "100%", maxWidth: 1060, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} />
+          </div>
         </div>
 
         {/* Footer: key terms */}
@@ -488,9 +501,9 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           }}>
             {(scene.key_terms ?? []).slice(0, 7).map(t => (
               <span key={t} style={{
-                background: `${accent}15`, border: `1px solid ${accent}44`,
+                background: `${accent}15`, border: `1.5px solid ${accent}44`,
                 color: accent, borderRadius: 999,
-                padding: "2px 11px", fontSize: 10, fontWeight: 700,
+                padding: "5px 18px", fontSize: 15, fontWeight: 700,
               }}>{t}</span>
             ))}
           </div>
@@ -515,16 +528,16 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           const isCurrent = li === visibleLines.length - 1;
           if (!isCurrent) return (
             <div key={visibleStart + li} style={{
-              background: "rgba(0,0,0,0.45)", borderRadius: 6, padding: "3px 14px",
-              fontSize: 14, color: "rgba(255,255,255,0.4)",
+              background: "rgba(0,0,0,0.45)", borderRadius: 8, padding: "4px 18px",
+              fontSize: 18, color: "rgba(255,255,255,0.4)",
             }}>{line}</div>
           );
           const words = line.split(" ");
           return (
             <div key={visibleStart + li} style={{
-              background: "rgba(0,0,0,0.75)", borderRadius: 8, padding: "5px 18px",
-              fontSize: 16, fontWeight: 600,
-              display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0 5px",
+              background: "rgba(0,0,0,0.75)", borderRadius: 10, padding: "7px 24px",
+              fontSize: 21, fontWeight: 600,
+              display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0 7px",
             }}>
               {words.map((w, wi) => (
                 <span key={wi} style={{ color: wi <= litWord ? "#ffffff" : "rgba(255,255,255,0.28)" }}>{w}</span>
