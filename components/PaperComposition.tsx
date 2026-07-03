@@ -43,6 +43,18 @@ const REVEAL_STEP  = 40;  // ~1.3s between elements
 
 function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
 
+// Split a leading emoji off a label ("💳 Physical Card" → ["💳", "Physical Card"])
+function splitEmoji(label: string): [string | null, string] {
+  const m = label.match(/^(\p{Extended_Pictographic}(?:‍\p{Extended_Pictographic})*️?)\s*(.*)$/u);
+  if (m && m[2]) return [m[1], m[2]];
+  return [null, label];
+}
+
+// Perpetual gentle bob so elements never sit frozen (phase-shifted per index)
+function bob(localFrame: number, index: number, amplitude = 4) {
+  return Math.sin((localFrame + index * 41) / 23) * amplitude;
+}
+
 function popIn(localFrame: number, index: number, durationFrames = 16) {
   const start = REVEAL_START + index * REVEAL_STEP;
   const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
@@ -156,8 +168,9 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
       {edges.map((e, i) => {
         const p1 = pos.get(e.from), p2 = pos.get(e.to); if (!p1 || !p2) return null;
         const sameCol = Math.abs(p1.x - p2.x) < 10;
-        const x1 = sameCol ? p1.x : p1.x + bw(e.from) / 2, y1 = sameCol ? p1.y + BH / 2 : p1.y;
-        const x2 = sameCol ? p2.x : p2.x - bw(e.to) / 2,   y2 = sameCol ? p2.y - BH / 2 : p2.y;
+        const fromW = bw(splitEmoji(e.from)[1]), toW = bw(splitEmoji(e.to)[1]);
+        const x1 = sameCol ? p1.x : p1.x + fromW / 2, y1 = sameCol ? p1.y + BH / 2 : p1.y;
+        const x2 = sameCol ? p2.x : p2.x - toW / 2,   y2 = sameCol ? p2.y - BH / 2 : p2.y;
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
         const d = sameCol
           ? `M${x1},${y1} C${x1+44},${my} ${x2+44},${my} ${x2},${y2}`
@@ -172,28 +185,37 @@ function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent
       })}
       {nodes.map((n, i) => {
         const p = pos.get(n); if (!p) return null;
-        const w = bw(n);
+        const [emoji, text] = splitEmoji(n);
+        const w = bw(text);
+        const nodeH = emoji ? 118 : BH;
         const isKey = circleSet.has(n.toLowerCase());
         const isPrimary = writes.includes(n) && writes.indexOf(n) <= 1;
-        const fs = Math.min(23, Math.max(15, Math.floor(250 / Math.max(n.length, 8))));
+        const fs = Math.min(22, Math.max(15, Math.floor(240 / Math.max(text.length, 8))));
         const anim = popIn(localFrame, i);
+        const yBob = bob(localFrame, i);
         // The highlight ring lands after all nodes are in — a beat of emphasis
         const ringDraw = drawIn(localFrame, nodes.length + 0.8);
+        const ringPulse = 1 + Math.sin(localFrame / 14) * 0.02;
         return (
           <g key={i} opacity={anim.opacity}
-            transform={`translate(${p.x} ${p.y}) scale(${anim.scale}) translate(${-p.x} ${-p.y})`}>
+            transform={`translate(0 ${yBob}) translate(${p.x} ${p.y}) scale(${anim.scale}) translate(${-p.x} ${-p.y})`}>
             {isKey && ringDraw > 0.01 && (
-              <ellipse cx={p.x} cy={p.y} rx={(w/2+20) * (0.9 + 0.1 * ringDraw)} ry={(BH/2+20) * (0.9 + 0.1 * ringDraw)}
+              <ellipse cx={p.x} cy={p.y} rx={(w/2+22) * (0.9 + 0.1 * ringDraw) * ringPulse} ry={(nodeH/2+18) * (0.9 + 0.1 * ringDraw) * ringPulse}
                 fill={`${accent}12`} stroke={accent} strokeWidth={3.5} strokeDasharray="10,5" opacity={0.9 * ringDraw} />
             )}
-            <rect x={p.x-w/2} y={p.y-BH/2} width={w} height={BH} rx={14}
+            <rect x={p.x-w/2} y={p.y-nodeH/2} width={w} height={nodeH} rx={16}
               fill={isPrimary ? `${accent}26` : SURFACE}
               stroke={accent} strokeWidth={isPrimary ? 3 : 2.2} filter="url(#node-shadow)" />
-            <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle"
+            {emoji && (
+              <text x={p.x} y={p.y - 20} textAnchor="middle" dominantBaseline="middle" fontSize={44}>
+                {emoji}
+              </text>
+            )}
+            <text x={p.x} y={emoji ? p.y + 32 : p.y} textAnchor="middle" dominantBaseline="middle"
               fill={TEXT_HI} fontSize={fs}
               fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
               fontWeight={isPrimary ? "700" : "600"}>
-              {n.length > 26 ? n.slice(0, 25) + "…" : n}
+              {text.length > 26 ? text.slice(0, 25) + "…" : text}
             </text>
           </g>
         );
@@ -525,6 +547,32 @@ function SceneVisual({ scene, imageUrl, accent, localFrame }: {
   );
 }
 
+// ─── AMBIENT PARTICLES ───────────────────────────────────────────────────────
+// Soft accent dots drifting upward — keeps every frame alive even when the
+// scene's elements have finished revealing.
+
+function ParticleField({ accent, localFrame }: { accent: string; localFrame: number }) {
+  const dots = Array.from({ length: 14 }, (_, i) => {
+    const size  = 6 + ((i * 97) % 16);
+    const speed = 0.1 + ((i * 53) % 10) / 45;
+    const y = 115 - ((localFrame * speed + i * 67) % 135);
+    const x = ((i * 733) % 100) + Math.sin((localFrame + i * 100) / 85) * 3;
+    const op = 0.05 + ((i * 37) % 9) / 90;
+    return { x, y, size, op };
+  });
+  return (
+    <AbsoluteFill style={{ zIndex: 2, pointerEvents: "none", overflow: "hidden" }}>
+      {dots.map((d, i) => (
+        <div key={i} style={{
+          position: "absolute", left: `${d.x}%`, top: `${d.y}%`,
+          width: d.size, height: d.size, borderRadius: "50%",
+          background: accent, opacity: d.op, filter: "blur(1.5px)",
+        }} />
+      ))}
+    </AbsoluteFill>
+  );
+}
+
 // ─── SUBTITLE ─────────────────────────────────────────────────────────────────
 
 function toLines(narration: string, wordsPerLine = 10): string[] {
@@ -574,9 +622,10 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   // Illustration backdrop: slow cinematic pan-zoom; hero-bright on image
   // scenes, dimmed under charts/diagrams so foreground stays readable
   const isImageScene = (scene.visual_type ?? "diagram") === "image";
+  const isChartScene = scene.visual_type === "chart";
   const bgPan   = interpolate(localFrame, [0, totalFrames], [-2.5, 2.5], { extrapolateRight: "clamp" });
   const bgScale = 1.1 + interpolate(localFrame, [0, totalFrames], [0, 0.06], { extrapolateRight: "clamp" });
-  const bgOpacity = isImageScene ? 0.85 : 0.22;
+  const bgOpacity = isImageScene ? 0.85 : 0.5;
 
   return (
     <AbsoluteFill style={{
@@ -598,10 +647,13 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           <AbsoluteFill style={{
             background: isImageScene
               ? `linear-gradient(180deg, ${BG_BASE}cc 0%, transparent 30%, transparent 62%, ${BG_BASE}f2 100%)`
-              : `linear-gradient(180deg, ${BG_BASE}d8 0%, ${BG_BASE}99 35%, ${BG_BASE}b8 100%)`,
+              : `linear-gradient(180deg, ${BG_BASE}b8 0%, ${BG_BASE}55 40%, ${BG_BASE}a8 100%)`,
           }} />
         </AbsoluteFill>
       )}
+
+      {/* Ambient drifting particles */}
+      <ParticleField accent={accent} localFrame={localFrame} />
 
       {/* Full-bleed content with Ken Burns drift */}
       <div style={{
@@ -659,6 +711,17 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
                     }}>{l}</span>
                   );
                 })}
+              </div>
+            ) : isChartScene ? (
+              /* Glass panel keeps chart data readable over the bright backdrop */
+              <div style={{
+                width: "100%",
+                background: `rgba(11, 14, 31, 0.68)`,
+                backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+                border: "1px solid #ffffff16",
+                borderRadius: 24, padding: "36px 44px",
+              }}>
+                <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
               </div>
             ) : (
               <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />

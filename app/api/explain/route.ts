@@ -78,13 +78,14 @@ For each scene choose the visual type that BEST ILLUSTRATES the concept. The vis
 "visual_type": "diagram"
   Use for: relationships, mechanisms, cause-effect, concept maps
   "visual_notes": exactly 4 strings:
-    "Write: [2-5 word label]" — short concept box label (e.g. "Working Memory", "Attention Head")
+    "Write: [emoji] [2-4 word label]" — MUST start with one emoji depicting the object itself (💳 Physical Card, 🦖 T. Rex, 🧠 Working Memory). The emoji is drawn large, like an icon.
     "Arrow: from [X] to [Y]" — directed edge (X and Y must match Write: labels exactly)
     "Circle: [label]" — highlight the KEY concept (must match a Write: label)
     "Label: [3-8 word note]" — annotation (e.g. "increases by 26%", "p < .05")
 
 "visual_type": "chart"
   Use for: layered structures, data comparisons, sequences, before/after
+  Every label/heading/event in charts should ALSO start with a fitting emoji (📱 Apple Pay, ⏱ 3 seconds) — they render as icons.
   "chart_type" must be one of:
 
   "layers" — tech stacks, neural net layers, hierarchical pipelines
