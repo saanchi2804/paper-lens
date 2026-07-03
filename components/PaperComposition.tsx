@@ -25,6 +25,41 @@ const LABEL: Record<SceneType, string> = {
   implication: "IMPLICATIONS", summary: "SUMMARY",
 };
 
+// ─── ENTRANCE ANIMATION HELPERS ──────────────────────────────────────────────
+// Frame-based staggered reveals: element `index` fades/scales in starting at
+// REVEAL_START + index * REVEAL_STEP frames into the scene, so visuals build
+// up progressively while the narration introduces them.
+
+const REVEAL_START = 18;  // ~0.6s in
+const REVEAL_STEP  = 40;  // ~1.3s between elements
+
+function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
+
+function popIn(localFrame: number, index: number, durationFrames = 16) {
+  const start = REVEAL_START + index * REVEAL_STEP;
+  const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const e = easeOutCubic(t);
+  return { opacity: e, scale: 0.86 + 0.14 * e, shift: (1 - e) * 14 };
+}
+
+// Progress 0→1 for drawing arrows/connectors, starting after `index` reveals
+function drawIn(localFrame: number, index: number, durationFrames = 24) {
+  const start = REVEAL_START + index * REVEAL_STEP;
+  const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return easeOutCubic(t);
+}
+
+function countUp(localFrame: number, index: number, value: number, durationFrames = 45) {
+  const start = REVEAL_START + index * REVEAL_STEP;
+  const t = interpolate(localFrame, [start, start + durationFrames], [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const eased = easeOutCubic(t);
+  // Preserve decimals when the source value has them
+  return Number.isInteger(value) ? Math.round(value * eased) : Math.round(value * eased * 10) / 10;
+}
+
 // ─── DIAGRAM ─────────────────────────────────────────────────────────────────
 
 function parseNotes(notes: string[]) {
@@ -48,7 +83,7 @@ function parseNotes(notes: string[]) {
   return { writes, arrows, circles, labels };
 }
 
-function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) {
+function ConceptDiagram({ notes, accent, localFrame }: { notes: string[]; accent: string; localFrame: number }) {
   const { writes, arrows, circles, labels } = parseNotes(notes);
   const W = 1000, H = 400;
 
@@ -119,7 +154,13 @@ function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) 
         const d = sameCol
           ? `M${x1},${y1} C${x1+44},${my} ${x2+44},${my} ${x2},${y2}`
           : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
-        return <path key={i} d={d} fill="none" stroke={accent} strokeWidth={3.5} opacity={0.65} markerEnd="url(#dg-arrow)" />;
+        // Arrow draws itself after both endpoint nodes have appeared
+        const revealIdx = Math.max(nodes.indexOf(e.from), nodes.indexOf(e.to)) + 0.6;
+        const draw = drawIn(localFrame, revealIdx);
+        if (draw <= 0.01) return null;
+        return <path key={i} d={d} fill="none" stroke={accent} strokeWidth={3.5} opacity={0.65 * Math.min(1, draw * 2)}
+          pathLength={1} strokeDasharray={1} strokeDashoffset={1 - draw}
+          markerEnd={draw > 0.95 ? "url(#dg-arrow)" : undefined} />;
       })}
       {nodes.map((n, i) => {
         const p = pos.get(n); if (!p) return null;
@@ -127,9 +168,16 @@ function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) 
         const isKey = circleSet.has(n.toLowerCase());
         const isPrimary = writes.includes(n) && writes.indexOf(n) <= 1;
         const fs = Math.min(23, Math.max(15, Math.floor(250 / Math.max(n.length, 8))));
+        const anim = popIn(localFrame, i);
+        // The highlight ring lands after all nodes are in — a beat of emphasis
+        const ringDraw = drawIn(localFrame, nodes.length + 0.8);
         return (
-          <g key={i}>
-            {isKey && <ellipse cx={p.x} cy={p.y} rx={w/2+20} ry={BH/2+20} fill={`${accent}12`} stroke={accent} strokeWidth={3.5} strokeDasharray="10,5" opacity={0.9} />}
+          <g key={i} opacity={anim.opacity}
+            transform={`translate(${p.x} ${p.y}) scale(${anim.scale}) translate(${-p.x} ${-p.y})`}>
+            {isKey && ringDraw > 0.01 && (
+              <ellipse cx={p.x} cy={p.y} rx={(w/2+20) * (0.9 + 0.1 * ringDraw)} ry={(BH/2+20) * (0.9 + 0.1 * ringDraw)}
+                fill={`${accent}12`} stroke={accent} strokeWidth={3.5} strokeDasharray="10,5" opacity={0.9 * ringDraw} />
+            )}
             <rect x={p.x-w/2} y={p.y-BH/2} width={w} height={BH} rx={14}
               fill={isPrimary ? `${accent}1a` : "#ffffff"}
               stroke={accent} strokeWidth={isPrimary ? 3 : 2.2} filter="url(#node-shadow)" />
@@ -142,29 +190,34 @@ function ConceptDiagram({ notes, accent }: { notes: string[]; accent: string }) 
           </g>
         );
       })}
-      {labels.slice(0, 2).map((l, i) => (
-        <text key={i} x={W/2} y={H - 10 - i * 26} textAnchor="middle" fill="#6b7280" fontSize={18}
-          fontFamily="system-ui" fontStyle="italic">
-          {l.length > 65 ? l.slice(0, 63) + "…" : l}
-        </text>
-      ))}
+      {labels.slice(0, 2).map((l, i) => {
+        const anim = popIn(localFrame, nodes.length + 1.6 + i * 0.5);
+        return (
+          <text key={i} x={W/2} y={H - 10 - i * 26} textAnchor="middle" fill="#6b7280" fontSize={18}
+            fontFamily="system-ui" fontStyle="italic" opacity={anim.opacity}>
+            {l.length > 65 ? l.slice(0, 63) + "…" : l}
+          </text>
+        );
+      })}
     </svg>
   );
 }
 
 // ─── CHART: LAYERS ────────────────────────────────────────────────────────────
 
-function LayersChart({ title, layers, accent }: {
+function LayersChart({ title, layers, accent, localFrame }: {
   title?: string;
   layers: { label: string; sublabel?: string }[];
   accent: string;
+  localFrame: number;
 }) {
   const count = Math.min(layers.length, 6);
   const displayed = layers.slice(0, count);
+  const titleAnim = popIn(localFrame, 0);
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 0, alignItems: "center" }}>
       {title && (
-        <div style={{ fontSize: 17, fontWeight: 700, color: accent, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 22 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: accent, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 22, opacity: titleAnim.opacity }}>
           {title}
         </div>
       )}
@@ -172,6 +225,7 @@ function LayersChart({ title, layers, accent }: {
         const depth = i / Math.max(count - 1, 1);
         const bg = `color-mix(in srgb, ${accent} ${8 + depth * 14}%, #ffffff)`;
         const borderColor = `color-mix(in srgb, ${accent} ${30 + depth * 40}%, transparent)`;
+        const anim = popIn(localFrame, i + 0.7);
         return (
           <div key={i} style={{
             width: `${88 - i * 4}%`,
@@ -182,6 +236,8 @@ function LayersChart({ title, layers, accent }: {
             display: "flex", alignItems: "center", justifyContent: "space-between",
             marginBottom: i < count - 1 ? -2 : 0,
             zIndex: count - i,
+            opacity: anim.opacity,
+            transform: `translateY(${-anim.shift}px)`,
           }}>
             <span style={{ fontSize: 24, fontWeight: 700, color: "#111827" }}>{layer.label}</span>
             {layer.sublabel && (
@@ -196,25 +252,29 @@ function LayersChart({ title, layers, accent }: {
 
 // ─── CHART: BAR ───────────────────────────────────────────────────────────────
 
-function BarChart({ bars, accent }: {
+function BarChart({ bars, accent, localFrame }: {
   bars: { label: string; value: number; highlight?: boolean; unit?: string }[];
   accent: string;
+  localFrame: number;
 }) {
   const max = Math.max(...bars.map(b => b.value), 1);
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 26, justifyContent: "center" }}>
       {bars.map((bar, i) => {
         const unit = (bar.unit ?? "").trim();
+        const anim = popIn(localFrame, i);
+        const grow = drawIn(localFrame, i + 0.3, 45);
+        const shown = countUp(localFrame, i + 0.3, bar.value);
         // LLMs sometimes stuff a phrase into unit — only append short true units
-        const valueText = unit.length <= 3 ? `${bar.value}${unit}` : `${bar.value}`;
+        const valueText = unit.length <= 3 ? `${shown}${unit}` : `${shown}`;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 18, opacity: anim.opacity, transform: `translateY(${anim.shift}px)` }}>
             <div style={{ width: 250, fontSize: 21, fontWeight: bar.highlight ? 700 : 500, color: bar.highlight ? "#111827" : "#4b5563", textAlign: "right", flexShrink: 0, lineHeight: 1.25 }}>
               {bar.label}
             </div>
             <div style={{ flex: 1, background: "#eef1f6", borderRadius: 10, height: 54, overflow: "hidden" }}>
               <div style={{
-                width: `${Math.max(3, (bar.value / max) * 100)}%`,
+                width: `${Math.max(3, (bar.value / max) * 100) * grow}%`,
                 height: "100%",
                 background: bar.highlight ? accent : `${accent}55`,
                 borderRadius: 10,
@@ -232,52 +292,74 @@ function BarChart({ bars, accent }: {
 
 // ─── CHART: COMPARISON ────────────────────────────────────────────────────────
 
-function ComparisonChart({ columns, accent }: {
+function ComparisonChart({ columns, accent, localFrame }: {
   columns: { heading: string; items: string[] }[];
   accent: string;
+  localFrame: number;
 }) {
   const cols = columns.slice(0, 2);
   return (
     <div style={{ width: "100%", display: "flex", gap: 26 }}>
-      {cols.map((col, ci) => (
-        <div key={ci} style={{
-          flex: 1,
-          border: `3px solid ${ci === 1 ? accent : "#e5e7eb"}`,
-          borderRadius: 16,
-          overflow: "hidden",
-          background: "#ffffff",
-        }}>
-          <div style={{
-            background: ci === 1 ? accent : "#f9fafb",
-            color: ci === 1 ? "#fff" : "#374151",
-            fontSize: 21, fontWeight: 700, textAlign: "center",
-            padding: "16px 20px",
-            borderBottom: `1px solid ${ci === 1 ? `${accent}44` : "#e5e7eb"}`,
+      {cols.map((col, ci) => {
+        const colAnim = popIn(localFrame, ci * 0.8);
+        return (
+          <div key={ci} style={{
+            flex: 1,
+            border: `3px solid ${ci === 1 ? accent : "#e5e7eb"}`,
+            borderRadius: 16,
+            overflow: "hidden",
+            background: "#ffffff",
+            opacity: colAnim.opacity,
+            transform: `translateY(${colAnim.shift}px)`,
           }}>
-            {col.heading}
+            <div style={{
+              background: ci === 1 ? accent : "#f9fafb",
+              color: ci === 1 ? "#fff" : "#374151",
+              fontSize: 21, fontWeight: 700, textAlign: "center",
+              padding: "16px 20px",
+              borderBottom: `1px solid ${ci === 1 ? `${accent}44` : "#e5e7eb"}`,
+            }}>
+              {col.heading}
+            </div>
+            <div style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
+              {col.items.slice(0, 5).map((item, ii) => {
+                const itemAnim = popIn(localFrame, 1.4 + ii * 0.7 + ci * 0.35);
+                return (
+                  <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 13, opacity: itemAnim.opacity, transform: `translateX(${ci === 1 ? itemAnim.shift : -itemAnim.shift}px)` }}>
+                    <span style={{ color: ci === 1 ? accent : "#9ca3af", fontSize: 21, marginTop: 0, fontWeight: 700 }}>
+                      {ci === 1 ? "✓" : "✗"}
+                    </span>
+                    <span style={{ fontSize: 19, color: "#374151", lineHeight: 1.45 }}>{item}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
-            {col.items.slice(0, 5).map((item, ii) => (
-              <div key={ii} style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
-                <span style={{ color: ci === 1 ? accent : "#9ca3af", fontSize: 21, marginTop: 0, fontWeight: 700 }}>
-                  {ci === 1 ? "✓" : "✗"}
-                </span>
-                <span style={{ fontSize: 19, color: "#374151", lineHeight: 1.45 }}>{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 // ─── CHART: STAT ──────────────────────────────────────────────────────────────
 
-function StatHighlight({ stat, context, accent, extraBars }: {
+function StatHighlight({ stat, context, accent, extraBars, localFrame }: {
   stat: string; context?: string; accent: string;
   extraBars?: { label: string; value: number; highlight?: boolean; unit?: string }[];
+  localFrame: number;
 }) {
+  const boxAnim = popIn(localFrame, 0);
+  const ctxAnim = popIn(localFrame, 1.4);
+  // Count up the leading number if the stat starts with one (e.g. "847%" or "3.2x")
+  const m = (stat ?? "").match(/^([\d,]+(?:\.\d+)?)(.*)$/);
+  let displayStat = stat;
+  if (m) {
+    const target = parseFloat(m[1].replace(/,/g, ""));
+    if (!Number.isNaN(target)) {
+      const shown = countUp(localFrame, 0.3, target, 60);
+      displayStat = `${Number.isInteger(target) ? Math.round(shown).toLocaleString() : shown}${m[2]}`;
+    }
+  }
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
       <div style={{
@@ -285,17 +367,19 @@ function StatHighlight({ stat, context, accent, extraBars }: {
         background: `linear-gradient(135deg, ${accent}18, ${accent}06)`,
         border: `2.5px solid ${accent}`, borderRadius: 16,
         padding: "36px 70px",
+        opacity: boxAnim.opacity,
+        transform: `scale(${boxAnim.scale})`,
       }}>
         <div style={{ fontSize: 110, fontWeight: 900, color: accent, lineHeight: 1, letterSpacing: "-0.03em" }}>
-          {stat.length > 18 ? stat.slice(0, 17) + "…" : stat}
+          {displayStat.length > 18 ? displayStat.slice(0, 17) + "…" : displayStat}
         </div>
         {context && (
-          <div style={{ fontSize: 24, color: "#6b7280", marginTop: 16, fontWeight: 600 }}>{context}</div>
+          <div style={{ fontSize: 24, color: "#6b7280", marginTop: 16, fontWeight: 600, opacity: ctxAnim.opacity }}>{context}</div>
         )}
       </div>
       {extraBars && extraBars.length > 0 && (
         <div style={{ width: "100%" }}>
-          <BarChart bars={extraBars} accent={accent} />
+          <BarChart bars={extraBars} accent={accent} localFrame={Math.max(0, localFrame - REVEAL_STEP * 2)} />
         </div>
       )}
     </div>
@@ -304,40 +388,47 @@ function StatHighlight({ stat, context, accent, extraBars }: {
 
 // ─── CHART: TIMELINE ─────────────────────────────────────────────────────────
 
-function TimelineChart({ events, accent }: { events: string[]; accent: string }) {
+function TimelineChart({ events, accent, localFrame }: { events: string[]; accent: string; localFrame: number }) {
   const displayed = events.slice(0, 5);
   return (
     <div style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 0, overflowX: "hidden" }}>
-      {displayed.map((evt, i) => (
-        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
-          {/* Connector line */}
-          {i < displayed.length - 1 && (
+      {displayed.map((evt, i) => {
+        const anim = popIn(localFrame, i);
+        const lineDraw = drawIn(localFrame, i + 0.5, 30);
+        return (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+            {/* Connector line — draws left→right toward the next dot */}
+            {i < displayed.length - 1 && (
+              <div style={{
+                position: "absolute", top: 29, left: "50%", width: `${lineDraw * 100}%`,
+                height: 3.5, background: `${accent}44`,
+                zIndex: 0,
+              }} />
+            )}
+            {/* Dot */}
             <div style={{
-              position: "absolute", top: 29, left: "50%", width: "100%",
-              height: 3.5, background: `${accent}44`,
-              zIndex: 0,
-            }} />
-          )}
-          {/* Dot */}
-          <div style={{
-            width: 58, height: 58, borderRadius: "50%",
-            background: accent, color: "#fff",
-            fontSize: 24, fontWeight: 800,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 1, flexShrink: 0,
-            boxShadow: `0 0 0 8px ${accent}22`,
-          }}>
-            {i + 1}
+              width: 58, height: 58, borderRadius: "50%",
+              background: accent, color: "#fff",
+              fontSize: 24, fontWeight: 800,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              zIndex: 1, flexShrink: 0,
+              boxShadow: `0 0 0 ${8 * anim.opacity}px ${accent}22`,
+              opacity: anim.opacity,
+              transform: `scale(${anim.scale})`,
+            }}>
+              {i + 1}
+            </div>
+            {/* Label */}
+            <div style={{
+              marginTop: 18, fontSize: 18, fontWeight: 600, color: "#374151",
+              textAlign: "center", padding: "0 12px", lineHeight: 1.4,
+              opacity: anim.opacity,
+            }}>
+              {evt.length > 70 ? evt.slice(0, 68) + "…" : evt}
+            </div>
           </div>
-          {/* Label */}
-          <div style={{
-            marginTop: 18, fontSize: 18, fontWeight: 600, color: "#374151",
-            textAlign: "center", padding: "0 12px", lineHeight: 1.4,
-          }}>
-            {evt.length > 70 ? evt.slice(0, 68) + "…" : evt}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -372,8 +463,8 @@ function ImagePanel({ imageUrl, labels, accent }: {
 
 // ─── VISUAL DISPATCHER ───────────────────────────────────────────────────────
 
-function SceneVisual({ scene, imageUrl, accent }: {
-  scene: Scene; imageUrl?: string; accent: string;
+function SceneVisual({ scene, imageUrl, accent, localFrame }: {
+  scene: Scene; imageUrl?: string; accent: string; localFrame: number;
 }) {
   const vt = scene.visual_type ?? "diagram";
 
@@ -384,15 +475,15 @@ function SceneVisual({ scene, imageUrl, accent }: {
   if (vt === "chart") {
     switch (scene.chart_type) {
       case "layers":
-        return <LayersChart title={scene.chart_title} layers={scene.layers ?? []} accent={accent} />;
+        return <LayersChart title={scene.chart_title} layers={scene.layers ?? []} accent={accent} localFrame={localFrame} />;
       case "bar":
-        return <BarChart bars={scene.bars ?? []} accent={accent} />;
+        return <BarChart bars={scene.bars ?? []} accent={accent} localFrame={localFrame} />;
       case "comparison":
-        return <ComparisonChart columns={scene.columns ?? []} accent={accent} />;
+        return <ComparisonChart columns={scene.columns ?? []} accent={accent} localFrame={localFrame} />;
       case "stat":
-        return <StatHighlight stat={scene.stat ?? ""} context={scene.stat_context} accent={accent} />;
+        return <StatHighlight stat={scene.stat ?? ""} context={scene.stat_context} accent={accent} localFrame={localFrame} />;
       case "timeline":
-        return <TimelineChart events={scene.timeline_events ?? []} accent={accent} />;
+        return <TimelineChart events={scene.timeline_events ?? []} accent={accent} localFrame={localFrame} />;
     }
   }
 
@@ -400,7 +491,7 @@ function SceneVisual({ scene, imageUrl, accent }: {
   const notes = scene.visual_notes ?? [];
   const { writes, arrows } = parseNotes(notes);
   if (writes.length === 0 && arrows.length === 0) return null;
-  return <ConceptDiagram notes={notes} accent={accent} />;
+  return <ConceptDiagram notes={notes} accent={accent} localFrame={localFrame} />;
 }
 
 // ─── SUBTITLE ─────────────────────────────────────────────────────────────────
@@ -428,6 +519,10 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   const fadeIn  = interpolate(localFrame, [0, 18], [0, 1],  { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const hlY     = interpolate(localFrame, [6, 24], [12, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const hlOp    = interpolate(localFrame, [6, 24], [0, 1],  { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // Ken Burns: slow drift-zoom across the whole scene so frames never sit still
+  const kenBurns = interpolate(localFrame, [0, totalFrames], [1, 1.025], { extrapolateRight: "clamp" });
+  // Gentle fade-out in the last half-second hands off to the next scene
+  const fadeOut = interpolate(localFrame, [totalFrames - 14, totalFrames - 2], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   const lines = toLines(scene.narration);
   const currentLine = Math.min(lines.length - 1, Math.floor(progress * lines.length));
@@ -454,8 +549,8 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
         border: `2.5px solid ${accent}`,
         display: "flex", flexDirection: "column",
         overflow: "hidden",
-        transform: `translateY(${slideIn}px)`,
-        opacity: fadeIn,
+        transform: `translateY(${slideIn}px) scale(${kenBurns})`,
+        opacity: fadeIn * fadeOut,
       }}>
         {/* Accent bar */}
         <div style={{ height: 6, background: `linear-gradient(90deg, ${accent}, ${accent}88)`, flexShrink: 0 }} />
@@ -487,7 +582,7 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           background: "#fafbff", overflow: "hidden",
         }}>
           <div style={{ width: "100%", maxWidth: 1060, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} />
+            <SceneVisual scene={scene} imageUrl={imageUrl} accent={accent} localFrame={localFrame} />
           </div>
         </div>
 
