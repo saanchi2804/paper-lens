@@ -84,6 +84,24 @@ Storyboard like a director: shot 1 sets the location, shot 2 shows the character
 
 ILLUSTRATION (legacy field): EVERY scene must also include "image_prompt" — copy the first shot's image_prompt here.
 
+━━━ STAGE DIRECTIONS (animated cartoon scenes — use when the world fits the asset library) ━━━
+The renderer also has a LIVE ANIMATED cartoon engine: cute blob characters that blink, talk, wave, point, walk and jump on animated stages. When a scene's world can be built from the assets below, ALSO include "stage" — it takes priority over shots and looks dramatically better (real animation, not stills). Aim to give at least 5-6 of the 10 scenes a stage. If a scene truly needs imagery outside this library, omit "stage" for that scene.
+
+  "stage": {
+    "env": one of "night" | "day" | "sunset" | "jungle" | "space" | "interior",
+    "actors": 1-3 of { "x": 5-95 (% across stage), "palette": "teal"|"coral"|"gold"|"violet", "emotion": "neutral"|"happy"|"worried"|"surprised", "action": "idle"|"talk"|"wave"|"point"|"walk"|"jump", "flip": true to face left, "scale": 0.5-1.6 },
+    "props": 0-5 of { "type": <see list>, "x": 2-98, "scale": 0.4-2.2 },
+    "beats": 0-6 of { "at": fraction 0-1, "actor": index, "action": ..., "emotion": ... } — retarget an actor mid-scene so gestures land as the words are spoken
+  }
+
+  Prop types: tree, mountain, globe, rocket, dino, cloud_rain, building, dome, arch, scroll, crown, pillar, flask, book, cell, dna, microscope, heart, virus, laptop, robot, gear, lightbulb, phone, server, coin, chart_board, factory, signpost.
+
+  Direction rules:
+  - Actor 0 is ALWAYS the protagonist, palette "teal", present in every staged scene.
+  - Actors must not overlap props: spread x positions.
+  - Choreograph with beats: e.g. protagonist "talk" at 0, "point" at 0.35 toward a prop placed on that side (flip accordingly), "jump" + "happy" when the finding lands.
+  - Pick the env that matches the story world (history paper → sunset/dome/arch; biology → interior/cell/dna; economics → day/factory/chart_board).
+
 ━━━ DATA INSERT (secondary, appears OVER the shots mid-scene) ━━━
 When a scene contains real numbers, a mechanism, or a comparison, ALSO give it a visual_type — it renders as a card that slides in over the illustration mid-scene, like a TED-Ed cutaway, then leaves. Scenes that are pure story (intro, hook) should use "visual_type": "image" (no insert). Use charts/diagrams ONLY when there is genuine data or structure to show — at most 4-5 scenes out of 10.
 
@@ -139,6 +157,12 @@ When a scene contains real numbers, a mechanism, or a comparison, ALSO give it a
       "punch_line": "847% ROI",
       "visual_type": "image",
       "image_prompt": "...",
+      "stage": {
+        "env": "day",
+        "actors": [{"x": 30, "palette": "teal", "emotion": "worried", "action": "talk"}],
+        "props": [{"type": "building", "x": 75, "scale": 1.5}],
+        "beats": [{"at": 0.4, "actor": 0, "action": "point", "emotion": "surprised"}]
+      },
       "shots": [
         {"image_prompt": "wide shot of a small grocery store at dawn, warm light spilling onto empty aisles", "start": 0},
         {"image_prompt": "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, holding a clipboard, staring anxiously at a wall of delivery boxes", "caption": "Meet Maya", "start": 0.3},

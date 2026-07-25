@@ -1,7 +1,10 @@
 "use client";
+import { useMemo } from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig, Sequence, Img } from "remotion";
 import { PaperScript, Scene, SceneType } from "@/types/script";
 import { ResolvedShot } from "./shots";
+import StageScene from "./stage/StageScene";
+import { validateStage, applyBeats } from "./stage/validate";
 
 // Bright 400-series accents — designed for the dark full-bleed background
 const ACCENT: Record<SceneType, string> = {
@@ -675,19 +678,25 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   const punchScale = interpolate(localFrame, [punchStart, punchStart + 14], [0.82, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const showPunch  = !!scene.punch_line && punchT > 0.001;
 
+  // ── SVG rig stage (preferred) ─────────────────────────────────────────────
+  // A valid stage renders a live vector scene; AI shots are the fallback.
+  const validStage = useMemo(() => validateStage(scene.stage), [scene]);
+
   // ── TED-Ed shot sequence ──────────────────────────────────────────────────
   // The illustrations ARE the film: full-bleed shots crossfade at their beat
   // fractions, each with its own Ken Burns move. Legacy scenes without a
   // storyboard fall back to a single shot built from imageUrl.
-  const displayShots: ResolvedShot[] = (shots && shots.length > 0)
-    ? shots
-    : (imageUrl ? [{ url: imageUrl, start: 0 }] : []);
+  const displayShots: ResolvedShot[] = validStage
+    ? []
+    : (shots && shots.length > 0)
+      ? shots
+      : (imageUrl ? [{ url: imageUrl, start: 0 }] : []);
   const hasShots = displayShots.length > 0;
 
   // A chart/diagram renders as a cutaway card that slides in over the art
   // mid-scene, then leaves — data as a moment, not a permanent fixture.
   const isImageScene = (scene.visual_type ?? "diagram") === "image";
-  const hasInsert = hasShots && !isImageScene && (
+  const hasInsert = (hasShots || !!validStage) && !isImageScene && (
     scene.visual_type === "chart" || (scene.visual_notes ?? []).length > 0
   );
   const insertStartF = Math.round(totalFrames * 0.30);
@@ -703,8 +712,8 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
   for (let i = displayShots.length - 1; i >= 0; i--) {
     if (localFrame >= shotStartF(i)) { activeShotIdx = i; break; }
   }
-  const activeCaption = displayShots[activeShotIdx]?.caption;
-  const captionAge = localFrame - shotStartF(activeShotIdx);
+  const activeCaption = hasShots ? displayShots[activeShotIdx]?.caption : undefined;
+  const captionAge = hasShots ? localFrame - shotStartF(activeShotIdx) : 0;
   const captionOp  = interpolate(captionAge, [8, 26], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const captionY   = interpolate(captionAge, [8, 26], [18, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
@@ -718,6 +727,17 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
       display: "flex", flexDirection: "column",
       opacity: fadeIn * fadeOut,
     }}>
+      {/* SVG rig stage — live vector scene, preferred over AI shots */}
+      {validStage && (
+        <AbsoluteFill style={{ overflow: "hidden", zIndex: 0, opacity: artDim }}>
+          <StageScene stage={applyBeats(validStage, progress)} frame={localFrame} />
+          {/* Bottom gradient keeps subtitles legible over bright grounds */}
+          <AbsoluteFill style={{
+            background: `linear-gradient(180deg, transparent 68%, ${BG_BASE}d8 100%)`,
+          }} />
+        </AbsoluteFill>
+      )}
+
       {/* Shot sequence — plain <img> so a slow load never stalls playback */}
       {hasShots && (
         <AbsoluteFill style={{ overflow: "hidden", zIndex: 0 }}>
@@ -793,7 +813,7 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
           overflow: "hidden", minHeight: 0,
           position: "relative",
         }}>
-          {hasShots ? (
+          {(hasShots || validStage) ? (
             <>
               {hasInsert && insertOp > 0.001 && (
                 <div style={{

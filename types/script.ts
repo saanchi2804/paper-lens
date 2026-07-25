@@ -66,6 +66,9 @@ export interface Scene {
   // the scene at which it takes over.
   shots?: Shot[];
 
+  // SVG rig stage directions — preferred over shots when valid
+  stage?: StageSpec;
+
   // kinetic text: the scene's single most striking phrase, flashed big
   // mid-scene (e.g. "847% ROI", "8 reports max")
   punch_line?: string;
@@ -79,6 +82,39 @@ export interface Shot {
   caption?: string;
   // fraction of the scene (0–0.85) at which this shot takes over
   start: number;
+}
+
+// ── SVG rig stage directions (LLM output; validated before rendering) ────────
+// When a scene carries a valid `stage`, the renderer draws a live vector
+// scene instead of AI illustration shots.
+
+export interface StageActorSpec {
+  x: number;                 // 0-100, % of stage width
+  palette?: string;          // teal | coral | gold | violet
+  emotion?: string;          // neutral | happy | worried | surprised
+  action?: string;           // idle | talk | wave | point | walk | jump
+  flip?: boolean;            // face left
+  scale?: number;            // 0.5–1.6
+}
+
+export interface StagePropSpec {
+  type: string;              // one of the prop library types
+  x: number;                 // 0-100
+  scale?: number;            // 0.4–2.2
+}
+
+export interface StageBeat {
+  at: number;                // fraction of scene (0-1) when the beat fires
+  actor: number;             // index into actors
+  action?: string;
+  emotion?: string;
+}
+
+export interface StageSpec {
+  env: string;               // night | day | sunset | jungle | space | interior
+  actors: StageActorSpec[];
+  props?: StagePropSpec[];
+  beats?: StageBeat[];
 }
 
 export interface PaperScript {

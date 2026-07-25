@@ -34,6 +34,33 @@ const DEMOS: Record<string, StageSpec> = {
     actors: [{ x: 62, palette: "coral", emotion: "happy", action: "wave", flip: true }],
     props: [{ type: "flask", x: 26, scale: 1.1 }, { type: "book", x: 42, scale: 0.9 }],
   },
+  // Prop pack galleries
+  "4": { // biology
+    env: "interior",
+    actors: [{ x: 88, palette: "violet", emotion: "surprised", action: "point", flip: true, scale: 0.85 }],
+    props: [
+      { type: "cell", x: 12, scale: 0.9 }, { type: "dna", x: 30, scale: 0.9 },
+      { type: "virus", x: 47, scale: 0.75 }, { type: "microscope", x: 62, scale: 0.9 },
+      { type: "heart", x: 75, scale: 0.7 },
+    ],
+  },
+  "5": { // tech + economics
+    env: "night",
+    actors: [{ x: 50, palette: "teal", emotion: "happy", action: "talk", scale: 0.8 }],
+    props: [
+      { type: "robot", x: 10, scale: 0.9 }, { type: "laptop", x: 25, scale: 0.8 },
+      { type: "gear", x: 38, scale: 0.7 }, { type: "coin", x: 64, scale: 0.7 },
+      { type: "chart_board", x: 78, scale: 0.9 }, { type: "factory", x: 93, scale: 1.0 },
+    ],
+  },
+  "6": { // nature / adventure — the dinosaur paper world
+    env: "day",
+    actors: [{ x: 22, palette: "gold", emotion: "surprised", action: "point", scale: 0.9 }],
+    props: [
+      { type: "dino", x: 55, scale: 1.7 }, { type: "mountain", x: 86, scale: 1.6 },
+      { type: "tree", x: 70, scale: 0.9 }, { type: "rocket", x: 8, scale: 0.6 },
+    ],
+  },
 };
 
 export default function TestStage() {
