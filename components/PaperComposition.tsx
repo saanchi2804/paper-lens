@@ -741,6 +741,21 @@ function SceneView({ scene, localFrame, fps, totalFrames, sceneIndex, totalScene
       {/* Shot sequence — plain <img> so a slow load never stalls playback */}
       {hasShots && (
         <AbsoluteFill style={{ overflow: "hidden", zIndex: 0 }}>
+          {/* Poster layer BEHIND the art: if an illustration is slow or fails
+              to generate (the image service is flaky), the frame still reads
+              as a designed scene instead of going blank. */}
+          <AbsoluteFill style={{
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: 26,
+          }}>
+            <div style={{ fontSize: 150, lineHeight: 1, opacity: 0.5 }}>{scene.emoji}</div>
+            {scene.punch_line && (
+              <div style={{
+                fontSize: 46, fontWeight: 800, color: `${accent}cc`,
+                textAlign: "center", padding: "0 80px", lineHeight: 1.2,
+              }}>{scene.punch_line}</div>
+            )}
+          </AbsoluteFill>
           {displayShots.map((shot, si) => {
             const startF = shotStartF(si);
             const nextF  = si + 1 < displayShots.length ? shotStartF(si + 1) : totalFrames;

@@ -131,7 +131,7 @@ Storyboard like a director: shot 1 sets the location, shot 2 shows the character
 ILLUSTRATION (legacy field): scenes WITHOUT a stage must also include "image_prompt" — copy the first shot's image_prompt here. Staged scenes omit it.
 
 ━━━ STAGE DIRECTIONS (animated cartoon scenes — use when the world fits the asset library) ━━━
-The renderer also has a LIVE ANIMATED cartoon engine: cute blob characters that blink, talk, wave, point, walk and jump on animated stages. This is the PREFERRED visual — real animation, not stills. When a scene's world can be built from the assets below, give it a "stage" (and then omit shots/image_prompt for that scene). Aim to stage at least 6 of the 10 scenes. If a scene truly needs imagery outside this library, omit "stage" and give it shots instead.
+The renderer also has a LIVE ANIMATED cartoon engine: cute blob characters that blink, talk, wave, point, walk and jump on animated stages. This is the PREFERRED visual — real animation, not stills. When a scene's world can be built from the assets below, give it a "stage" (and then omit shots/image_prompt for that scene). Scene 1 (intro) MUST have a stage — it is the first thing the viewer sees. Aim to stage at least 8 of the 10 scenes. If a scene truly needs imagery outside this library, omit "stage" and give it shots instead.
 
   "stage": {
     "env": one of "night" | "day" | "sunset" | "jungle" | "space" | "interior",
