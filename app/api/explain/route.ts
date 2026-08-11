@@ -12,6 +12,52 @@ function wordsToSeconds(text: string): number {
   return Math.max(90, Math.round((words / 140) * 60));
 }
 
+// Clean the JSON dialect LLMs actually emit: code fences, "..." filler copied
+// from the prompt's example, trailing commas, and // comments.
+function sanitizeJsonish(s: string): string {
+  return s
+    // The visual_notes convention ("Write: label") tempts the model into
+    // emitting a key:value pair inside the array — "Write": "Spices" — which
+    // is invalid there. Collapse it back into a single string.
+    .replace(/"(Write|Arrow|Circle|Label)"\s*:\s*"([^"]*)"/g, '"$1: $2"')
+    // ellipsis filler inside arrays/objects: [a, b, ...] or {..., "x": 1}
+    .replace(/,\s*\.\.\.\s*(?=[\]}])/g, "")
+    .replace(/(?<=[[{])\s*\.\.\.\s*,/g, "")
+    .replace(/,\s*\.\.\.\s*,/g, ",")
+    // line comments (not inside strings — good enough after fence stripping)
+    .replace(/^\s*\/\/.*$/gm, "")
+    // trailing commas
+    .replace(/,(\s*[\]}])/g, "$1");
+}
+
+// Salvage a response that ran out of output tokens mid-JSON: cut back to the
+// last complete scene object and close the open scenes array + root object.
+// A 7-scene video beats a hard error.
+function repairTruncatedJson(s: string): string | null {
+  let inStr = false, esc = false;
+  let depth = 0;
+  let lastSceneEnd = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{" || c === "[") depth++;
+    else if (c === "}" || c === "]") {
+      depth--;
+      // depth 2 remaining = root object + scenes array → a scene just closed
+      if (depth === 2) lastSceneEnd = i + 1;
+    }
+  }
+  if (depth === 0) return s;            // already balanced; failure was elsewhere
+  if (lastSceneEnd < 0) return null;    // nothing usable
+  return s.slice(0, lastSceneEnd) + "]}";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const client = new Anthropic({
@@ -72,8 +118,8 @@ MOTIF: at the top level include "motif_emoji" — ONE emoji representing the pro
 
 PROTAGONIST DESCRIPTION: at the top level include "protagonist_description" — a 15-25 word PHYSICAL description of the protagonist for the illustrator (age, hair, clothing, one distinctive accessory, e.g. "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, always holding a clipboard"). This exact description is pasted into every illustration prompt so the character looks identical in every frame.
 
-━━━ SHOTS (the film itself — this is the most important part) ━━━
-EVERY scene must include "shots": an array of 3-5 full-screen illustrated frames, like a TED-Ed animation storyboard. The video IS these illustrations — the viewer watches them while the narration plays.
+━━━ SHOTS (illustrated storyboard — ONLY for scenes without a "stage") ━━━
+Scenes that you give a "stage" (see below) must OMIT "shots" and "image_prompt" entirely — the animated stage replaces them and duplicating both wastes space. For every scene WITHOUT a stage, include "shots": an array of 3-5 full-screen illustrated frames, like a TED-Ed animation storyboard, which the viewer watches while the narration plays.
 
 Each shot:
   "image_prompt": 15-25 words describing ONE moment: characters in action, environments, objects, emotions. Show, don't diagram. When the protagonist appears, include the protagonist_description VERBATIM. Vary the camera: wide establishing shot → close-up on a face → over-the-shoulder detail. NEVER describe charts, boxes, arrows, or text.
@@ -82,10 +128,10 @@ Each shot:
 
 Storyboard like a director: shot 1 sets the location, shot 2 shows the character acting, shot 3 shows the consequence or a revealing detail. The shots must follow the narration's arc — what is being SAID at 40% of the scene is what shot at start:0.4 must SHOW.
 
-ILLUSTRATION (legacy field): EVERY scene must also include "image_prompt" — copy the first shot's image_prompt here.
+ILLUSTRATION (legacy field): scenes WITHOUT a stage must also include "image_prompt" — copy the first shot's image_prompt here. Staged scenes omit it.
 
 ━━━ STAGE DIRECTIONS (animated cartoon scenes — use when the world fits the asset library) ━━━
-The renderer also has a LIVE ANIMATED cartoon engine: cute blob characters that blink, talk, wave, point, walk and jump on animated stages. When a scene's world can be built from the assets below, ALSO include "stage" — it takes priority over shots and looks dramatically better (real animation, not stills). Aim to give at least 5-6 of the 10 scenes a stage. If a scene truly needs imagery outside this library, omit "stage" for that scene.
+The renderer also has a LIVE ANIMATED cartoon engine: cute blob characters that blink, talk, wave, point, walk and jump on animated stages. This is the PREFERRED visual — real animation, not stills. When a scene's world can be built from the assets below, give it a "stage" (and then omit shots/image_prompt for that scene). Aim to stage at least 6 of the 10 scenes. If a scene truly needs imagery outside this library, omit "stage" and give it shots instead.
 
   "stage": {
     "env": one of "night" | "day" | "sunset" | "jungle" | "space" | "interior",
@@ -156,18 +202,12 @@ When a scene contains real numbers, a mechanism, or a comparison, ALSO give it a
       "emoji": "👩‍🏫",
       "punch_line": "847% ROI",
       "visual_type": "image",
-      "image_prompt": "...",
       "stage": {
         "env": "day",
         "actors": [{"x": 30, "palette": "teal", "emotion": "worried", "action": "talk"}],
         "props": [{"type": "building", "x": 75, "scale": 1.5}],
         "beats": [{"at": 0.4, "actor": 0, "action": "point", "emotion": "surprised"}]
-      },
-      "shots": [
-        {"image_prompt": "wide shot of a small grocery store at dawn, warm light spilling onto empty aisles", "start": 0},
-        {"image_prompt": "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, holding a clipboard, staring anxiously at a wall of delivery boxes", "caption": "Meet Maya", "start": 0.3},
-        {"image_prompt": "close-up of a spreadsheet reflected in round glasses, red numbers glowing", "start": 0.6}
-      ]
+      }
     },
     {
       "id": 2,
@@ -176,10 +216,17 @@ When a scene contains real numbers, a mechanism, or a comparison, ALSO give it a
       "headline": "...",
       "key_terms": ["..."],
       "emoji": "🎯",
+      "punch_line": "...",
       "visual_type": "chart",
       "chart_type": "layers",
       "chart_title": "...",
-      "layers": [{"label": "...", "sublabel": "..."}, ...]
+      "layers": [{"label": "...", "sublabel": "..."}, ...],
+      "image_prompt": "wide shot of a small grocery store at dawn, warm light spilling onto empty aisles",
+      "shots": [
+        {"image_prompt": "wide shot of a small grocery store at dawn, warm light spilling onto empty aisles", "start": 0},
+        {"image_prompt": "Maya, a woman in her 30s with short curly black hair, round glasses, mustard-yellow cardigan, holding a clipboard, staring anxiously at a wall of delivery boxes", "caption": "Meet Maya", "start": 0.3},
+        {"image_prompt": "close-up of a spreadsheet reflected in round glasses, red numbers glowing", "start": 0.6}
+      ]
     },
     {
       "id": 6,
@@ -221,17 +268,43 @@ ${pdfText}`;
     const raw = response.content[0].type === "text" ? response.content[0].text : "";
 
     let script;
-    try {
+    {
       let cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) cleaned = jsonMatch[0];
       // Repair invalid escape sequences LLMs emit (e.g. "\$1,200" — \$ is not
       // valid JSON). Drop the backslash before any non-escapable character.
       cleaned = cleaned.replace(/\\(?!["\\/bfnrtu])/g, "");
-      script = JSON.parse(cleaned);
-    } catch {
-      console.error("[explain] raw response:", raw.slice(0, 500));
-      return Response.json({ error: `Failed to parse script. Raw: ${raw.slice(0, 300)}` }, { status: 500 });
+      try {
+        script = JSON.parse(cleaned);
+      } catch {
+        try {
+          script = JSON.parse(sanitizeJsonish(cleaned));
+          console.warn("[explain] parsed after sanitizing JSON-ish artifacts");
+        } catch { script = null; }
+      }
+      if (!script) {
+        // Truncation (output token cap) — salvage the complete scenes rather
+        // than losing the whole generation.
+        const repaired = repairTruncatedJson(sanitizeJsonish(cleaned));
+        try {
+          script = repaired ? JSON.parse(repaired) : null;
+          if (script) {
+            console.warn(`[explain] recovered truncated response: ${script.scenes?.length ?? 0} scenes`);
+          }
+        } catch { script = null; }
+      }
+      if (!script || !Array.isArray(script.scenes) || script.scenes.length < 3) {
+        console.error("[explain] unparseable response, stop_reason:", response.stop_reason, raw.slice(0, 500));
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            const { writeFileSync } = await import("node:fs");
+            writeFileSync("/tmp/paperlens-last-raw.json", raw);
+            console.error("[explain] full raw written to /tmp/paperlens-last-raw.json");
+          } catch { /* best effort */ }
+        }
+        return Response.json({ error: `Failed to parse script. Raw: ${raw.slice(0, 300)}` }, { status: 500 });
+      }
     }
 
     script.scenes = script.scenes

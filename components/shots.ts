@@ -19,6 +19,9 @@ export function getPollinationsUrl(prompt: string, seed: number): string {
 export function buildSceneShots(script: PaperScript): Record<number, ResolvedShot[]> {
   const out: Record<number, ResolvedShot[]> = {};
   for (const s of script.scenes) {
+    // Staged scenes render as live vector animation — no illustrations needed,
+    // so don't generate or preload images the renderer will never show.
+    if (s.stage) { out[s.id] = []; continue; }
     const raw = s.shots?.length
       ? s.shots
       : [{ image_prompt: s.image_prompt?.trim() || `${s.headline}, illustrated story scene`, start: 0 }];

@@ -28,8 +28,10 @@ export interface ValidatedStage {
 // Returns null when the stage is unusable (renderer then falls back to shots).
 export function validateStage(raw: StageSpecJSON | undefined): ValidatedStage | null {
   if (!raw || typeof raw !== "object") return null;
-  if (!ENVS.has(raw.env)) return null;
   if (!Array.isArray(raw.actors) || raw.actors.length === 0) return null;
+  // An unfamiliar env (e.g. "kitchen") shouldn't throw away a good stage —
+  // fall back to a neutral one rather than dropping to a blank frame.
+  const env: EnvName = (ENVS.has(raw.env) ? raw.env : "interior") as EnvName;
 
   const actors: StageActor[] = raw.actors.slice(0, 3).map((a, i) => ({
     x: clamp(Number(a?.x), 5, 95),
@@ -61,7 +63,7 @@ export function validateStage(raw: StageSpecJSON | undefined): ValidatedStage | 
     }))
     .sort((a, b) => a.at - b.at);
 
-  return { spec: { env: raw.env as EnvName, actors, props }, beats };
+  return { spec: { env, actors, props }, beats };
 }
 
 // Apply the latest fired beat per actor for the current scene progress.
